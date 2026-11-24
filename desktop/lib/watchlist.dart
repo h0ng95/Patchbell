@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'advisories.dart';
 import 'catalog.dart';
 import 'desktop_alerts.dart';
+import 'npm_packages.dart';
 
 const checkInterval = Duration(hours: 2);
 
@@ -48,6 +49,7 @@ class TrackedVersion {
             'name': product.name,
             'category': product.category.name,
             'cpe': product.cpe,
+            if (product.npmPackage != null) 'npmPackage': product.npmPackage,
           },
         'version': version,
         'checkedAt': checkedAt?.toIso8601String(),
@@ -64,6 +66,7 @@ class TrackedVersion {
             category:
                 ProductCategory.values.byName(custom['category'] as String),
             cpe: custom['cpe'] as String?,
+            npmPackage: custom['npmPackage'] as String?,
           );
     final version = product?.normalizeVersion(json['version'] as String);
     if (product == null || version == null) return null;
@@ -85,13 +88,16 @@ class Watchlist extends ChangeNotifier {
     required SharedPreferencesAsync preferences,
     required NvdClient client,
     required DesktopAlerts alerts,
+    NpmClient? npm,
   })  : _preferences = preferences,
         _client = client,
-        _alerts = alerts;
+        _alerts = alerts,
+        _npm = npm ?? NpmClient();
 
   static const _storageKey = 'patchbell.watchlist.v1';
   final SharedPreferencesAsync _preferences;
   final NvdClient _client;
+  final NpmClient _npm;
   final DesktopAlerts _alerts;
   final _items = <TrackedVersion>[];
   final _errors = <String, String>{};
@@ -111,8 +117,10 @@ class Watchlist extends ChangeNotifier {
 
   List<TrackedVersion> get items => List.unmodifiable(_items);
   String? checkError(TrackedVersion item) => _errors[item.key];
-  Future<List<CatalogMatch>> searchProducts(String term) =>
-      _client.searchProducts(term);
+  Future<CatalogPage> searchProducts(String term, {int startIndex = 0}) =>
+      _client.searchProducts(term, startIndex: startIndex);
+  Future<CatalogPage> searchPackages(String term, {int startIndex = 0}) =>
+      _npm.searchPackages(term, startIndex: startIndex);
 
   Future<void> load() async {
     if (loaded || _loading || _disposed) return;
@@ -156,19 +164,21 @@ class Watchlist extends ChangeNotifier {
   void register(Product product, String version, {TrackedVersion? previous}) {
     final index = _items.indexWhere((item) => item.key == previous?.key);
     final existing = index == -1 ? null : _items[index];
-    final sameVersion =
-        existing?.product.cpe == product.cpe && existing?.version == version;
+    final sameVersion = existing != null &&
+        existing.product.cpe == product.cpe &&
+        existing.product.npmPackage == product.npmPackage &&
+        existing.version == version;
     if (sameVersion &&
-        existing?.product.name == product.name &&
-        existing?.product.category == product.category) {
+        existing.product.name == product.name &&
+        existing.product.category == product.category) {
       return;
     }
     final item = TrackedVersion(
       product: product,
       version: version,
-      checkedAt: sameVersion ? existing?.checkedAt : null,
-      advisories: sameVersion ? existing!.advisories : const [],
-      notified: sameVersion ? existing!.notified : const {},
+      checkedAt: sameVersion ? existing.checkedAt : null,
+      advisories: sameVersion ? existing.advisories : const [],
+      notified: sameVersion ? existing.notified : const {},
     );
     if (previous == null) {
       _items.add(item);
@@ -199,7 +209,7 @@ class Watchlist extends ChangeNotifier {
     final threshold = DateTime.now().subtract(checkInterval);
     final batch = _items
         .where((item) =>
-            item.product.cpe != null &&
+            item.product.canCheck &&
             (!onlyDue ||
                 item.checkedAt == null ||
                 item.checkedAt!.isBefore(threshold)))
@@ -229,7 +239,9 @@ class Watchlist extends ChangeNotifier {
 
   Future<void> _checkOne(TrackedVersion item) async {
     try {
-      final records = await _client.check(item.product, item.version);
+      final records = await (item.product.npmPackage == null
+          ? _client.check(item.product, item.version)
+          : _npm.check(item.product, item.version));
       if (_disposed || !_items.contains(item)) return;
       final checkedAt = DateTime.now();
       final checked = item.withResult(

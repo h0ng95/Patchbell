@@ -4,19 +4,28 @@ import 'dart:io';
 import 'catalog.dart';
 
 class Advisory {
-  const Advisory({required this.id, required this.published, this.score});
+  const Advisory({
+    required this.id,
+    required this.published,
+    this.score,
+    this.fromOsv = false,
+  });
 
   final String id;
   final DateTime published;
   final double? score;
+  final bool fromOsv;
 
-  Uri get nvdUrl => Uri.https('nvd.nist.gov', '/vuln/detail/$id');
+  Uri get url => fromOsv
+      ? Uri.https('osv.dev', '/vulnerability/$id')
+      : Uri.https('nvd.nist.gov', '/vuln/detail/$id');
 
   factory Advisory.fromJson(Map<String, dynamic> json) {
     return Advisory(
       id: json['id'] as String,
       published: DateTime.parse(json['published'] as String).toUtc(),
       score: (json['score'] as num?)?.toDouble(),
+      fromOsv: json['fromOsv'] as bool? ?? false,
     );
   }
 
@@ -24,6 +33,7 @@ class Advisory {
         'id': id,
         'published': published.toIso8601String(),
         'score': score,
+        if (fromOsv) 'fromOsv': true,
       };
 }
 
@@ -35,11 +45,25 @@ class AdvisoryRequestException implements Exception {
 typedef GetNvdPage = Future<Map<String, dynamic>> Function(Uri uri);
 
 class CatalogMatch {
-  const CatalogMatch(this.cpe, this.vendor, this.product);
+  const CatalogMatch(this.cpe, this.subtitle, this.name) : npmPackage = null;
 
-  final String cpe;
-  final String vendor;
-  final String product;
+  const CatalogMatch.npm(String package, this.subtitle)
+      : cpe = null,
+        npmPackage = package,
+        name = package;
+
+  final String? cpe;
+  final String? npmPackage;
+  final String subtitle;
+  final String name;
+  String get key => cpe ?? 'npm:$npmPackage';
+}
+
+class CatalogPage {
+  const CatalogPage(this.matches, {this.nextStartIndex});
+
+  final List<CatalogMatch> matches;
+  final int? nextStartIndex;
 }
 
 class NvdClient {
@@ -55,9 +79,9 @@ class NvdClient {
   static final _applicationCpe =
       RegExp(r'^cpe:2\.3:a:((?:\\.|[^:\\])+):((?:\\.|[^:\\])+):');
 
-  Future<List<CatalogMatch>> searchProducts(String name) async {
+  Future<CatalogPage> searchProducts(String name, {int startIndex = 0}) async {
     final term = name.trim();
-    if (term.isEmpty) return [];
+    if (term.isEmpty) return const CatalogPage([]);
     final page = await _fetch(Uri.https(
       'services.nvd.nist.gov',
       '/rest/json/cpes/2.0',
@@ -65,10 +89,17 @@ class NvdClient {
         'keywordSearch': term,
         'cpeMatchString': 'cpe:2.3:a',
         'resultsPerPage': '250',
+        'startIndex': '$startIndex',
       },
     ));
+    final rows = page['products'] as List<dynamic>;
+    final total = page['totalResults'] as int;
+    if (page['startIndex'] != startIndex ||
+        (rows.isEmpty && startIndex < total)) {
+      throw const FormatException('Invalid NVD product page');
+    }
     final unique = <String, CatalogMatch>{};
-    for (final record in page['products'] as List<dynamic>) {
+    for (final record in rows) {
       final cpe =
           (record as Map<String, dynamic>)['cpe'] as Map<String, dynamic>;
       if (cpe['deprecated'] == true) continue;
@@ -79,17 +110,20 @@ class NvdClient {
       final key = '$vendor:$product';
       unique.putIfAbsent(
         key,
-        () => CatalogMatch(key, vendor, product),
+        () => CatalogMatch(
+            key, vendor.replaceAll('_', ' '), product.replaceAll('_', ' ')),
       );
     }
-    final productName = term.toLowerCase().replaceAll(' ', '_');
-    return unique.values.toList()
+    final productName = term.toLowerCase().replaceAll('_', ' ');
+    final matches = unique.values.toList()
       ..sort((a, b) {
-        final aExact = a.product == productName;
-        final bExact = b.product == productName;
+        final aExact = a.name == productName;
+        final bExact = b.name == productName;
         if (aExact != bExact) return aExact ? -1 : 1;
-        return a.product.compareTo(b.product);
+        return a.name.compareTo(b.name);
       });
+    final next = startIndex + rows.length;
+    return CatalogPage(matches, nextStartIndex: next < total ? next : null);
   }
 
   Future<Map<String, dynamic>> _fetch(Uri uri) {
@@ -176,31 +210,44 @@ class NvdClient {
     return null;
   }
 
-  static Future<Map<String, dynamic>> _request(Uri uri) async {
-    final client = HttpClient()
-      ..connectionTimeout = const Duration(seconds: 15)
-      ..userAgent = 'Patchbell/0.1';
-    const timeout = Duration(seconds: 25);
-    try {
-      final request = await client.getUrl(uri).timeout(timeout);
-      request.followRedirects = false;
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      final response = await request.close().timeout(timeout);
-      if (response.statusCode == HttpStatus.tooManyRequests) {
-        throw const AdvisoryRequestException(
-          'NVD 요청 한도에 도달했어요. 잠시 후 다시 확인해 주세요.',
-        );
-      }
-      if (response.statusCode != HttpStatus.ok) {
-        throw AdvisoryRequestException(
-          'NVD 응답 오류 (${response.statusCode})',
-        );
-      }
+  static Future<Map<String, dynamic>> _request(Uri uri) =>
+      requestJson(uri, source: 'NVD');
+}
 
-      final body = await utf8.decoder.bind(response).join().timeout(timeout);
-      return jsonDecode(body) as Map<String, dynamic>;
-    } finally {
-      client.close(force: true);
+Future<Map<String, dynamic>> requestJson(
+  Uri uri, {
+  required String source,
+  Map<String, Object?>? payload,
+}) async {
+  final client = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 15)
+    ..userAgent = 'Patchbell/0.1';
+  const timeout = Duration(seconds: 25);
+  try {
+    final request = await client
+        .openUrl(payload == null ? 'GET' : 'POST', uri)
+        .timeout(timeout);
+    request.followRedirects = false;
+    request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+    if (payload != null) {
+      request.headers.contentType = ContentType.json;
+      request.write(jsonEncode(payload));
     }
+    final response = await request.close().timeout(timeout);
+    if (response.statusCode == HttpStatus.tooManyRequests) {
+      throw AdvisoryRequestException(
+        '$source 요청 한도에 도달했어요. 잠시 후 다시 확인해 주세요.',
+      );
+    }
+    if (response.statusCode != HttpStatus.ok) {
+      throw AdvisoryRequestException(
+        '$source 응답 오류 (${response.statusCode})',
+      );
+    }
+
+    final body = await utf8.decoder.bind(response).join().timeout(timeout);
+    return jsonDecode(body) as Map<String, dynamic>;
+  } finally {
+    client.close(force: true);
   }
 }

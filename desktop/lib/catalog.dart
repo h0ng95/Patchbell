@@ -17,27 +17,36 @@ class Product {
     required this.example,
     required this.updateUrl,
     this.aliases = const [],
-  });
+  }) : npmPackage = null;
 
   Product.custom({
     required this.name,
     required this.category,
     this.cpe,
+    this.npmPackage,
   })  : id = 'custom:${name.trim().toLowerCase()}',
         example = '1.2.3',
         aliases = const [],
-        updateUrl = null;
+        updateUrl = npmPackage == null
+            ? null
+            : Uri.https('www.npmjs.com', '/package/$npmPackage').toString();
 
   final String id;
   final String name;
   final ProductCategory category;
   final String? cpe;
+  final String? npmPackage;
   final String example;
   final String? updateUrl;
   final List<String> aliases;
-  String get identity => cpe ?? id;
+  String get identity => npmPackage == null ? cpe ?? id : 'npm:$npmPackage';
+  bool get canCheck => npmPackage != null || cpe != null;
 
   String? normalizeVersion(String input) {
+    if (npmPackage != null) {
+      final version = input.trim().replaceFirst(RegExp(r'^v(?=\d)'), '');
+      return version.length <= 40 && _semver.hasMatch(version) ? version : null;
+    }
     var version = input.trim().toLowerCase();
     if (id == 'go' && version.startsWith('go')) {
       version = version.substring(2);
@@ -54,6 +63,13 @@ class Product {
         ? version
         : null;
   }
+
+  static final _semver = RegExp(
+    r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)'
+    r'(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)'
+    r'(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?'
+    r'(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$',
+  );
 
   String cpeName(String version) {
     final escaped = version.replaceAll('+', r'\+');

@@ -348,11 +348,11 @@ class _HomeState extends State<_Home> {
                               label: const Text('설치 버전 찾기'),
                             ),
                             OutlinedButton.icon(
-                              onPressed: !items.any(
-                                          (item) => item.product.cpe != null) ||
-                                      watchlist.checking
-                                  ? null
-                                  : watchlist.checkAll,
+                              onPressed:
+                                  !items.any((item) => item.product.canCheck) ||
+                                          watchlist.checking
+                                      ? null
+                                      : watchlist.checkAll,
                               icon: const Icon(Icons.refresh_rounded),
                               label: Text(
                                   watchlist.checking ? '확인 중' : '보안 공지 확인'),
@@ -417,7 +417,7 @@ class _HomeState extends State<_Home> {
                           ),
                         const SizedBox(height: 12),
                         const Text(
-                          '출처: 미국 국립표준기술연구소(NIST) NVD. 공지 일치 여부는 공개된 제품·버전 정보 기준이에요.',
+                          '보안 공지 출처는 NIST NVD와 OSV예요.',
                           style: TextStyle(fontSize: 12, color: _muted),
                         ),
                       ],
@@ -510,7 +510,7 @@ class _WatchRow extends StatelessWidget {
     final (label, color) = switch ((checking, error, item.checkedAt, count)) {
       (true, _, _, _) => ('확인 중', _mint),
       (_, String _, _, _) => ('확인 실패', _warning),
-      (_, _, null, _) when item.product.cpe == null => ('공지 출처 미연결', _muted),
+      (_, _, null, _) when !item.product.canCheck => ('공지 출처 미연결', _muted),
       (_, _, null, _) => ('미확인', _muted),
       (_, _, _, 0) => ('일치 공지 없음', _muted),
       _ => ('공지 $count건', _warning),
@@ -610,8 +610,8 @@ void _showDetails(BuildContext context, TrackedVersion item, [String? error]) {
               Text(error, style: const TextStyle(color: _warning)),
             ],
             const SizedBox(height: 16),
-            if (item.product.cpe == null)
-              const Text('항목 수정에서 NVD 제품을 연결하면 보안 공지를 확인할 수 있어요.')
+            if (!item.product.canCheck)
+              const Text('항목 수정에서 제품이나 패키지를 연결하면 보안 공지를 확인할 수 있어요.')
             else if (item.advisories.isEmpty && error == null)
               Text(item.checkedAt == null
                   ? '아직 조회한 보안 공지가 없어요.'
@@ -636,7 +636,7 @@ void _showDetails(BuildContext context, TrackedVersion item, [String? error]) {
                         '${score == null ? '' : ' · CVSS $score'}',
                       ),
                       trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-                      onTap: () => _open(context, advisory.nvdUrl),
+                      onTap: () => _open(context, advisory.url),
                     );
                   },
                 ),

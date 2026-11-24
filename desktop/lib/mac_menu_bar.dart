@@ -45,7 +45,7 @@ class MacMenuBar {
         'loaded': watchlist.loaded,
         'loadFailed': watchlist.loadError != null,
         'checking': watchlist.checking,
-        'canCheck': items.any((item) => item.product.cpe != null),
+        'canCheck': items.any((item) => item.product.canCheck),
         'checkFailed': items.any((item) => watchlist.checkError(item) != null),
         'notifications': watchlist.notifications,
         'affected': [
