@@ -1,0 +1,25 @@
+# Patchbell 데스크톱
+
+Windows와 macOS에서 프로그램, 에디터, SDK, 언어와 런타임의 설치 버전을 등록하고 관련 공개 보안 공지를 확인하는 Flutter 앱입니다.
+
+## 실행
+
+Flutter를 설치한 뒤 이 폴더에서 실행합니다.
+
+- Mac에서 실행하려면 Xcode가 필요합니다. 명령은 **flutter run -d macos**입니다.
+- Windows에서 실행하려면 Visual Studio의 Desktop development with C++ 워크로드가 필요합니다. 명령은 **flutter run -d windows**입니다.
+
+Mac에서 실행하면 메뉴 막대 오른쪽에 종 모양 아이콘이 나타납니다. 빨간 숫자는 일치하는 공지가 있는 등록 항목 수입니다. 메뉴에서 항목을 선택해 공지를 볼 수 있고 **등록하기**를 누르면 등록 창이 열립니다.
+
+Mac에서는 창을 닫아도 메뉴 막대에서 실행되며, **Patchbell 종료**를 선택하면 종료됩니다. **데스크톱 알림**에서 알림을 켤 수 있습니다.
+
+## 버전과 공지 연결
+
+- **항목 등록 → 빠른 선택**에서 Chrome, VS Code, Flutter SDK, Dart SDK, Node.js, Python, Go를 선택합니다.
+- **직접 등록**에서 다른 제품 이름, 분류, 버전을 추가할 수 있습니다. **NVD 제품 검색 및 연결**에서 제품을 선택하면 해당 제품 식별자로 공지를 확인합니다.
+- 검색 결과에 제품이 없으면 **공지 출처 미연결** 상태로 저장하고 나중에 **항목 수정**에서 연결할 수 있습니다.
+- 앱을 실행하면 최근 확인 시점에 따라 조회하고, 실행 중에는 두 시간마다 다시 확인합니다. **보안 공지 확인** 버튼으로도 조회할 수 있습니다.
+- **데스크톱 알림**에서 알림을 켜면 같은 등록 버전의 공지를 중복 알림하지 않습니다. **테스트 알림**으로 확인할 수 있습니다.
+- 조회 결과와 등록 목록은 이 기기에 저장합니다. 제품 연결·조회에 필요한 검색어와 제품 식별자, 버전을 NVD API에 보냅니다. 공지마다 운영체제, 배포판 등 적용 조건은 원문에서 확인할 수 있습니다.
+
+This product uses data from the NVD API but is not endorsed or certified by the NVD. [NVD Product APIs](https://nvd.nist.gov/developers/products)
