@@ -26,7 +26,7 @@ jobs:
             runner: windows-2022
             asset: Patchbell-Windows-x64.zip
           - platform: macos
-            runner: macos-15
+            runner: macos-15-intel
             asset: Patchbell-macOS.dmg
     steps:
       - uses: actions/checkout@v6
