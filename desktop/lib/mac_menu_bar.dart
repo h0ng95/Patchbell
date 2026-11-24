@@ -24,19 +24,20 @@ class MacMenuBar {
 
   void connect() {
     macPlatformChannel.setMethodCallHandler(_handleAction);
-    watchlist.addListener(_sendStatus);
-    _sendStatus();
+    watchlist.addListener(refresh);
+    refresh();
   }
 
   void disconnect() {
-    watchlist.removeListener(_sendStatus);
+    watchlist.removeListener(refresh);
     macPlatformChannel.setMethodCallHandler(null);
   }
 
-  void _sendStatus() => unawaited(_updateNativeMenu());
+  void refresh() => unawaited(_updateNativeMenu());
 
   Future<void> _updateNativeMenu() async {
     final items = watchlist.items;
+    final text = watchlist.text;
     final affected = items.where((item) => item.advisories.isNotEmpty).toList()
       ..sort((a, b) =>
           b.advisories.first.published.compareTo(a.advisories.first.published));
@@ -48,13 +49,27 @@ class MacMenuBar {
         'canCheck': items.any((item) => item.product.canCheck),
         'checkFailed': items.any((item) => watchlist.checkError(item) != null),
         'notifications': watchlist.notifications,
+        'labels': {
+          'badge': text.menuBadge(affected.length),
+          'affected': text.menuAffected(affected.length),
+          'loadFailed': text.menuLoadFailed,
+          'loading': text.menuLoading,
+          'noAdvisories': text.menuNoAdvisories,
+          'checking': text.menuChecking,
+          'checkFailed': text.menuCheckFailed,
+          'register': text.menuRegister,
+          'scan': '${text.scan}…',
+          'open': text.menuOpen,
+          'check': text.checkAdvisories,
+          'alerts': '${text.desktopAlerts}…',
+          'quit': text.menuQuit,
+        },
         'affected': [
           for (final item in affected)
             {
               'key': item.key,
-              'name': item.product.name,
-              'version': item.version,
-              'advisories': item.advisories.length,
+              'title': '${text.productName(item.product)} ${item.version} · '
+                  '${text.menuAdvisoryCount(item.advisories.length)}',
             },
         ],
       });
@@ -68,7 +83,7 @@ class MacMenuBar {
   Future<void> _handleAction(MethodCall call) async {
     switch (call.method) {
       case 'requestStatus':
-        _sendStatus();
+        refresh();
       case 'register':
         onRegister();
       case 'scanInstalled':

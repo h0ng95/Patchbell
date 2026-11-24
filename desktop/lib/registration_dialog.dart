@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'advisories.dart';
 import 'catalog.dart';
+import 'strings.dart';
 import 'watchlist.dart';
 
 class RegistrationDialog extends StatefulWidget {
@@ -108,6 +109,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final text = PatchbellText.of(context);
     if (widget.item == null && !_custom && _product == null) {
       return _CatalogDialog(
         initialQuery: '',
@@ -126,7 +128,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
       );
     }
     return AlertDialog(
-      title: Text(widget.item == null ? '항목 등록' : '항목 수정'),
+      title: Text(widget.item == null ? text.register : text.edit),
       content: SizedBox(
         width: 430,
         child: Form(
@@ -143,7 +145,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
                       _custom = false;
                     }),
                     icon: const Icon(Icons.search_rounded, size: 18),
-                    label: const Text('제품 검색으로 돌아가기'),
+                    label: Text(text.backToSearch),
                   ),
                   const SizedBox(height: 8),
                 ],
@@ -151,34 +153,34 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
                   TextFormField(
                     controller: _name,
                     maxLength: 80,
-                    decoration: const InputDecoration(
-                      labelText: '제품 이름',
-                      hintText: '예: Rust, Zig, Kotlin SDK',
+                    decoration: InputDecoration(
+                      labelText: text.productNameLabel,
+                      hintText: text.productNameExample,
                       counterText: '',
                     ),
                     validator: (value) => value == null || value.trim().isEmpty
-                        ? '제품 이름을 입력해 주세요.'
+                        ? text.enterProductName
                         : null,
                   ),
                   const SizedBox(height: 14),
                   DropdownButtonFormField<ProductCategory>(
                     value: _category,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: '분류'),
+                    decoration: InputDecoration(labelText: text.categoryLabel),
                     items: [
                       for (final category in ProductCategory.values)
                         DropdownMenuItem(
                           value: category,
-                          child: Text(category.label),
+                          child: Text(text.category(category)),
                         ),
                     ],
                     onChanged: (value) => setState(() => _category = value!),
                   ),
                 ] else
                   InputDecorator(
-                    decoration: const InputDecoration(labelText: '소프트웨어'),
-                    child:
-                        Text('${_product!.name} · ${_product!.category.label}'),
+                    decoration: InputDecoration(labelText: text.software),
+                    child: Text(
+                        '${text.productName(_product!)} · ${text.category(_product!.category)}'),
                   ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -187,7 +189,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
                   textInputAction: TextInputAction.done,
                   autocorrect: false,
                   decoration: InputDecoration(
-                    labelText: '설치 버전',
+                    labelText: text.installedVersion,
                     hintText: _selection?.example,
                     counterText: '',
                   ),
@@ -197,11 +199,11 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
                     if (product == null) return null;
                     final version = product.normalizeVersion(input ?? '');
                     if (version == null) {
-                      return '설치 버전을 입력해 주세요 (예: ${product.example}).';
+                      return text.enterVersion(product.example);
                     }
                     if (widget.watchlist
                         .contains(product, version, except: widget.item)) {
-                      return '이미 등록한 제품과 버전이에요.';
+                      return text.alreadyRegistered;
                     }
                     return null;
                   },
@@ -216,12 +218,12 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
                         onPressed: _linkProduct,
                         icon: const Icon(Icons.link_rounded),
                         label: Text(_selection!.canCheck
-                            ? '공지 출처 변경'
-                            : '제품·패키지 검색 및 연결'),
+                            ? text.changeSource
+                            : text.findAndLink),
                       ),
                       if (_selection!.canCheck)
                         IconButton(
-                          tooltip: '공지 출처 연결 해제',
+                          tooltip: text.disconnectSource,
                           onPressed: () => setState(() {
                             _linkedCpe = null;
                             _linkedNpm = null;
@@ -233,7 +235,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
                   Text(
                     _linkedNpm != null
                         ? 'npm · $_linkedNpm'
-                        : _linkedCpe ?? '제품이나 패키지를 연결하면 등록한 버전의 공지를 확인해요.',
+                        : _linkedCpe ?? text.linkedSourceHelp,
                     style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
@@ -246,9 +248,9 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('취소'),
+          child: Text(text.cancel),
         ),
-        FilledButton(onPressed: _submit, child: const Text('저장')),
+        FilledButton(onPressed: _submit, child: Text(text.save)),
       ],
     );
   }
@@ -284,11 +286,12 @@ class _CatalogDialog extends StatefulWidget {
 class _CatalogDialogState extends State<_CatalogDialog> {
   static const _typingDelay = Duration(milliseconds: 450);
   static const _searchTimeout = Duration(seconds: 15);
-  static const _nestCore = CatalogMatch.npm('@nestjs/core', 'NestJS · npm');
+  static const _nestCore =
+      CatalogMatch.npm('@nestjs/core', subtitle: 'NestJS · npm');
   late final _query = TextEditingController(text: widget.initialQuery);
   final _listScrollController = ScrollController();
   final _cachedResults = <(_CatalogSource, String), CatalogPage>{};
-  final _errors = <_CatalogSource, String>{};
+  final _errors = <_CatalogSource, LocalizedMessage>{};
   final _activeQueries = <_CatalogSource, String>{};
   final _queuedQueries = <_CatalogSource, String>{};
   ProductCategory? _category;
@@ -397,9 +400,9 @@ class _CatalogDialogState extends State<_CatalogDialog> {
     } catch (error) {
       if (mounted && _term == term) {
         setState(() => _errors[source] = switch (error) {
-              TimeoutException() => '${source.label} 검색 응답이 늦어지고 있어요.',
-              AdvisoryRequestException(:final message) => message,
-              _ => '${source.label} 검색 결과를 불러오지 못했어요.',
+              TimeoutException() => (text) => text.searchSlow(source.label),
+              final AdvisoryRequestException failure => failure.message,
+              _ => (text) => text.searchFailed(source.label),
             });
       }
     } finally {
@@ -423,21 +426,26 @@ class _CatalogDialogState extends State<_CatalogDialog> {
     }
   }
 
-  Widget _matchTile(CatalogMatch match) => ListTile(
-        dense: true,
-        title: Text(match.name),
-        subtitle: Text(match.subtitle),
-        onTap: () => _selectRemote(match),
-      );
+  Widget _matchTile(CatalogMatch match, PatchbellText text) {
+    final version = match.latestVersion;
+    return ListTile(
+      dense: true,
+      title: Text(match.name),
+      subtitle:
+          Text(version == null ? match.subtitle : text.npmVersion(version)),
+      onTap: () => _selectRemote(match),
+    );
+  }
 
-  List<Widget> _resultSlivers(_CatalogSource source, Set<String> presetKeys) {
+  List<Widget> _resultSlivers(
+      _CatalogSource source, Set<String> presetKeys, PatchbellText text) {
     final result = _results(source);
     final matches = result?.matches
             .where((match) => !presetKeys.contains(match.key))
             .toList() ??
         [];
     final next = result?.nextStartIndex;
-    final error = _errors[source];
+    final error = _errors[source]?.call(text);
     final busy = _activeQueries.containsKey(source);
     const previewSize = 3;
     final preview = source == _CatalogSource.npm &&
@@ -445,15 +453,17 @@ class _CatalogDialogState extends State<_CatalogDialog> {
         matches.length > previewSize;
     return [
       if (matches.isNotEmpty || next != null)
-        SliverToBoxAdapter(child: _ResultHeading('${source.label} 검색 결과')),
+        SliverToBoxAdapter(
+            child: _ResultHeading(text.searchResults(source.label))),
       SliverList(
         delegate: SliverChildBuilderDelegate(
-          (context, index) => _matchTile(matches[index]),
+          (context, index) => _matchTile(matches[index], text),
           childCount: preview ? previewSize : matches.length,
         ),
       ),
       if (_activeQueries[source] == _term || _queuedQueries[source] == _term)
-        SliverToBoxAdapter(child: _ResultHeading('${source.label} 검색 중…')),
+        SliverToBoxAdapter(
+            child: _ResultHeading(text.searchingSource(source.label))),
       if (error != null)
         SliverToBoxAdapter(
           child: Text(error,
@@ -474,8 +484,8 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                       }
                     },
               child: Text(error == null
-                  ? '${source.label} 결과 더 보기'
-                  : '${source.label} 다시 시도'),
+                  ? text.moreResults(source.label)
+                  : text.retrySource(source.label)),
             ),
           ),
         ),
@@ -484,6 +494,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final text = PatchbellText.of(context);
     final presets = _presets;
     final quickPackage = _quickPackage;
     final presetKeys = {
@@ -499,7 +510,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
               result.nextStartIndex == null;
         });
     return AlertDialog(
-      title: Text(_showPresets ? '항목 등록' : '제품·패키지 연결'),
+      title: Text(_showPresets ? text.register : text.linkProduct),
       content: SizedBox(
         width: 470,
         height: (MediaQuery.sizeOf(context).height * .62).clamp(180.0, 390.0),
@@ -510,11 +521,11 @@ class _CatalogDialogState extends State<_CatalogDialog> {
               controller: _query,
               autofocus: true,
               maxLength: 80,
-              decoration: const InputDecoration(
-                labelText: '제품 이름 검색',
-                hintText: '예: Python, Docker, NestJS',
+              decoration: InputDecoration(
+                labelText: text.searchLabel,
+                hintText: text.searchExample,
                 counterText: '',
-                prefixIcon: Icon(Icons.search_rounded),
+                prefixIcon: const Icon(Icons.search_rounded),
               ),
               textInputAction: TextInputAction.search,
               onChanged: _queryChanged,
@@ -527,13 +538,13 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                 runSpacing: 4,
                 children: [
                   ChoiceChip(
-                    label: const Text('전체'),
+                    label: Text(text.all),
                     selected: _category == null,
                     onSelected: (_) => setState(() => _category = null),
                   ),
                   for (final category in ProductCategory.values)
                     ChoiceChip(
-                      label: Text(category.label),
+                      label: Text(text.category(category)),
                       selected: _category == category,
                       onSelected: (_) => setState(() => _category = category),
                     ),
@@ -546,7 +557,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                 _CatalogSource.values.every(
                   (source) => _results(source)?.matches.isNotEmpty != true,
                 ))
-              const LinearProgressIndicator(semanticsLabel: '제품·패키지 검색 중'),
+              LinearProgressIndicator(semanticsLabel: text.searching),
             Expanded(
               child: Scrollbar(
                 controller: _listScrollController,
@@ -556,7 +567,8 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                   slivers: [
                     if (presetKeys.isNotEmpty) ...[
                       SliverToBoxAdapter(
-                        child: _ResultHeading('빠른 선택 · ${presetKeys.length}개'),
+                        child:
+                            _ResultHeading(text.quickPicks(presetKeys.length)),
                       ),
                       SliverList(
                         delegate: SliverChildBuilderDelegate(
@@ -565,9 +577,9 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                             return ListTile(
                               dense: true,
                               visualDensity: VisualDensity.compact,
-                              title: Text(product.name),
+                              title: Text(text.productName(product)),
                               trailing: Text(
-                                product.category.label,
+                                text.category(product.category),
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                               onTap: () => widget.onPreset!(product),
@@ -577,15 +589,14 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                         ),
                       ),
                       if (quickPackage != null)
-                        SliverToBoxAdapter(child: _matchTile(quickPackage)),
+                        SliverToBoxAdapter(
+                            child: _matchTile(quickPackage, text)),
                     ],
                     for (final source in _CatalogSource.values)
-                      ..._resultSlivers(source, presetKeys),
+                      ..._resultSlivers(source, presetKeys, text),
                     if (noMatches)
-                      const SliverToBoxAdapter(
-                        child: _ResultHeading(
-                          '일치하는 제품이나 패키지가 없어요.',
-                        ),
+                      SliverToBoxAdapter(
+                        child: _ResultHeading(text.nothingFound),
                       ),
                   ],
                 ),
@@ -598,11 +609,11 @@ class _CatalogDialogState extends State<_CatalogDialog> {
         if (widget.onManual != null)
           TextButton(
             onPressed: () => widget.onManual!(_query.text.trim()),
-            child: const Text('직접 등록'),
+            child: Text(text.addManually),
           ),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('닫기'),
+          child: Text(text.close),
         ),
       ],
     );

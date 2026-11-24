@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'catalog.dart';
+import 'strings.dart';
 
 class Advisory {
   const Advisory({
@@ -38,22 +39,32 @@ class Advisory {
 }
 
 class AdvisoryRequestException implements Exception {
-  const AdvisoryRequestException(this.message);
-  final String message;
+  const AdvisoryRequestException(this.source, this.status);
+
+  final String source;
+  final int status;
+
+  String message(PatchbellText text) => status == HttpStatus.tooManyRequests
+      ? text.requestLimit(source)
+      : text.responseError(source, status);
 }
 
 typedef GetNvdPage = Future<Map<String, dynamic>> Function(Uri uri);
 
 class CatalogMatch {
-  const CatalogMatch(this.cpe, this.subtitle, this.name) : npmPackage = null;
+  const CatalogMatch(this.cpe, this.subtitle, this.name)
+      : npmPackage = null,
+        latestVersion = null;
 
-  const CatalogMatch.npm(String package, this.subtitle)
+  const CatalogMatch.npm(String package,
+      {this.latestVersion, this.subtitle = 'npm'})
       : cpe = null,
         npmPackage = package,
         name = package;
 
   final String? cpe;
   final String? npmPackage;
+  final String? latestVersion;
   final String subtitle;
   final String name;
   String get key => cpe ?? 'npm:$npmPackage';
@@ -234,15 +245,8 @@ Future<Map<String, dynamic>> requestJson(
       request.write(jsonEncode(payload));
     }
     final response = await request.close().timeout(timeout);
-    if (response.statusCode == HttpStatus.tooManyRequests) {
-      throw AdvisoryRequestException(
-        '$source 요청 한도에 도달했어요. 잠시 후 다시 확인해 주세요.',
-      );
-    }
     if (response.statusCode != HttpStatus.ok) {
-      throw AdvisoryRequestException(
-        '$source 응답 오류 (${response.statusCode})',
-      );
+      throw AdvisoryRequestException(source, response.statusCode);
     }
 
     final body = await utf8.decoder.bind(response).join().timeout(timeout);

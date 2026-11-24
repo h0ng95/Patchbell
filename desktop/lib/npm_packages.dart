@@ -31,7 +31,8 @@ class NpmClient {
       final package = row['package'] as Map<String, dynamic>;
       final name = package['name'] as String;
       if (!_packageName.hasMatch(name)) continue;
-      final match = CatalogMatch.npm(name, 'npm · 최신 ${package['version']}');
+      final match =
+          CatalogMatch.npm(name, latestVersion: package['version'] as String?);
       if (name == '@$term/core') {
         frameworkCore = match;
       } else {

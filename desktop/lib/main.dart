@@ -2,30 +2,30 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'advisories.dart';
+import 'app_settings.dart';
 import 'catalog.dart';
 import 'desktop_alerts.dart';
 import 'installed_software.dart';
 import 'installed_software_dialog.dart';
 import 'mac_menu_bar.dart';
 import 'registration_dialog.dart';
+import 'strings.dart';
 import 'watchlist.dart';
 
-const _page = Color(0xff101916);
-const _surface = Color(0xff19271f);
-const _border = Color(0xff364a3d);
-const _mint = Color(0xffc9f88b);
-const _muted = Color(0xffacc0b1);
-const _warning = Color(0xfff7d68f);
-
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final preferences = SharedPreferencesAsync();
+  final settings = await AppSettings.load(preferences);
   runApp(PatchbellApp(
+    preferences: preferences,
+    settings: settings,
     watchlist: Watchlist(
-      preferences: SharedPreferencesAsync(),
+      preferences: preferences,
       client: NvdClient(),
       alerts: DesktopAlerts(),
     ),
@@ -33,19 +33,35 @@ void main() {
 }
 
 class PatchbellApp extends StatefulWidget {
-  const PatchbellApp({super.key, required this.watchlist});
+  const PatchbellApp({
+    super.key,
+    required this.watchlist,
+    this.preferences,
+    this.settings = const AppSettings(),
+  });
 
   final Watchlist watchlist;
+  final SharedPreferencesAsync? preferences;
+  final AppSettings settings;
 
   @override
   State<PatchbellApp> createState() => _PatchbellAppState();
 }
 
 class _PatchbellAppState extends State<PatchbellApp> {
-  @override
-  void initState() {
-    super.initState();
-    unawaited(widget.watchlist.load());
+  late AppSettings _settings = widget.settings;
+
+  Future<bool> _applySettings(AppSettings settings) async {
+    final preferences = widget.preferences;
+    if (preferences != null) {
+      try {
+        await settings.save(preferences);
+      } catch (_) {
+        return false;
+      }
+    }
+    if (mounted) setState(() => _settings = settings);
+    return true;
   }
 
   @override
@@ -55,34 +71,21 @@ class _PatchbellAppState extends State<PatchbellApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final colors = ColorScheme.fromSeed(
-      seedColor: _mint,
-      brightness: Brightness.dark,
-    ).copyWith(
-      primary: _mint,
-      onPrimary: const Color(0xff1b301c),
-      surface: _surface,
-      onSurface: const Color(0xffeff5ed),
-      onSurfaceVariant: _muted,
-      outline: _border,
-      outlineVariant: _border,
-    );
-    return MaterialApp(
-      title: 'Patchbell',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        colorScheme: colors,
-        scaffoldBackgroundColor: _page,
-        useMaterial3: true,
-        inputDecorationTheme: const InputDecorationTheme(
-          border: OutlineInputBorder(),
+  Widget build(BuildContext context) => MaterialApp(
+        title: 'Patchbell',
+        debugShowCheckedModeBanner: false,
+        supportedLocales: PatchbellText.supportedLocales,
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        locale: _settings.locale,
+        theme: patchbellTheme(Brightness.light),
+        darkTheme: patchbellTheme(Brightness.dark),
+        themeMode: _settings.themeMode,
+        home: _Home(
+          watchlist: widget.watchlist,
+          settings: _settings,
+          onSettingsChanged: _applySettings,
         ),
-      ),
-      home: _Home(watchlist: widget.watchlist),
-    );
-  }
+      );
 }
 
 IconData _categoryIcon(ProductCategory category) => switch (category) {
@@ -92,11 +95,13 @@ IconData _categoryIcon(ProductCategory category) => switch (category) {
       ProductCategory.runtime => Icons.code_rounded,
     };
 
-String _date(DateTime value, {bool includeTime = false}) {
+String _date(BuildContext context, DateTime value, {bool includeTime = false}) {
   final date = value.toLocal();
-  String two(int number) => number.toString().padLeft(2, '0');
-  final day = '${date.year}.${two(date.month)}.${two(date.day)}';
-  return includeTime ? '$day ${two(date.hour)}:${two(date.minute)}' : day;
+  final localizations = MaterialLocalizations.of(context);
+  final day = localizations.formatCompactDate(date);
+  final time = localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date),
+      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context));
+  return includeTime ? '$day $time' : day;
 }
 
 Future<void> _open(BuildContext context, Uri url) async {
@@ -107,15 +112,21 @@ Future<void> _open(BuildContext context, Uri url) async {
   }
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('브라우저에서 링크를 열지 못했어요.')),
+      SnackBar(content: Text(PatchbellText.of(context).linkFailed)),
     );
   }
 }
 
 class _Home extends StatefulWidget {
-  const _Home({required this.watchlist});
+  const _Home({
+    required this.watchlist,
+    required this.settings,
+    required this.onSettingsChanged,
+  });
 
   final Watchlist watchlist;
+  final AppSettings settings;
+  final Future<bool> Function(AppSettings) onSettingsChanged;
 
   @override
   State<_Home> createState() => _HomeState();
@@ -124,6 +135,8 @@ class _Home extends StatefulWidget {
 class _HomeState extends State<_Home> {
   ProductCategory? _filter;
   MacMenuBar? _menuBar;
+  bool _savingSettings = false;
+  bool _loadingStarted = false;
 
   @override
   void initState() {
@@ -142,6 +155,20 @@ class _HomeState extends State<_Home> {
           if (_canOpenMenuDialog) _showAlerts();
         },
       )..connect();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final current = PatchbellText.of(context);
+    if (current.locale != widget.watchlist.text.locale) {
+      widget.watchlist.text = current;
+      _menuBar?.refresh();
+    }
+    if (!_loadingStarted) {
+      _loadingStarted = true;
+      unawaited(widget.watchlist.load());
     }
   }
 
@@ -190,49 +217,69 @@ class _HomeState extends State<_Home> {
     setState(() => _filter = null);
   }
 
+  Future<void> _showSettings() async {
+    final settings = await showDialog<AppSettings>(
+      context: context,
+      builder: (_) => AppSettingsDialog(settings: widget.settings),
+    );
+    if (!mounted || settings == null) return;
+    setState(() => _savingSettings = true);
+    final saved = await widget.onSettingsChanged(settings);
+    if (!mounted) return;
+    setState(() => _savingSettings = false);
+    if (!saved) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(PatchbellText.of(context).settingsSaveFailed)),
+      );
+    }
+  }
+
   void _showAlerts() {
     final watchlist = widget.watchlist;
     showDialog<void>(
       context: context,
       builder: (context) => ListenableBuilder(
         listenable: watchlist,
-        builder: (context, _) => AlertDialog(
-          title: const Text('데스크톱 알림'),
-          content: SizedBox(
-            width: 390,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('새 보안 공지 알림'),
-                  subtitle: const Text('앱이 실행 중일 때 새 공지를 알려드려요.'),
-                  value: watchlist.notifications,
-                  onChanged: watchlist.changingNotifications
-                      ? null
-                      : watchlist.setNotifications,
-                ),
-                if (watchlist.notificationMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child: Text(watchlist.notificationMessage!),
+        builder: (context, _) {
+          final text = PatchbellText.of(context);
+          return AlertDialog(
+            title: Text(text.desktopAlerts),
+            content: SizedBox(
+              width: 390,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(text.newAdvisoryAlerts),
+                    subtitle: Text(text.alertsWhileRunning),
+                    value: watchlist.notifications,
+                    onChanged: watchlist.changingNotifications
+                        ? null
+                        : watchlist.setNotifications,
                   ),
-              ],
+                  if (watchlist.notificationMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(watchlist.notificationMessage!),
+                    ),
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed:
-                  watchlist.notifications ? watchlist.sendTestAlert : null,
-              child: const Text('테스트 알림'),
-            ),
-            FilledButton.tonal(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('닫기'),
-            ),
-          ],
-        ),
+            actions: [
+              TextButton(
+                onPressed:
+                    watchlist.notifications ? watchlist.sendTestAlert : null,
+                child: Text(text.testAlert),
+              ),
+              FilledButton.tonal(
+                onPressed: () => Navigator.pop(context),
+                child: Text(text.close),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -240,6 +287,8 @@ class _HomeState extends State<_Home> {
   @override
   Widget build(BuildContext context) {
     final watchlist = widget.watchlist;
+    final text = PatchbellText.of(context);
+    final colors = Theme.of(context).colorScheme;
     return ListenableBuilder(
       listenable: watchlist,
       builder: (context, _) {
@@ -254,8 +303,9 @@ class _HomeState extends State<_Home> {
           body: Column(
             children: [
               Container(
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: _border)),
+                decoration: BoxDecoration(
+                  border:
+                      Border(bottom: BorderSide(color: colors.outlineVariant)),
                 ),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
@@ -265,11 +315,11 @@ class _HomeState extends State<_Home> {
                       width: 34,
                       height: 34,
                       decoration: BoxDecoration(
-                        color: _mint,
+                        color: colors.primary,
                         borderRadius: BorderRadius.circular(9),
                       ),
-                      child: const Icon(Icons.notifications_none_rounded,
-                          color: Color(0xff1b301c), size: 21),
+                      child: Icon(Icons.notifications_none_rounded,
+                          color: colors.onPrimary, size: 21),
                     ),
                     const SizedBox(width: 10),
                     Text('Patchbell',
@@ -285,7 +335,14 @@ class _HomeState extends State<_Home> {
                             ? Icons.notifications_active_outlined
                             : Icons.notifications_none_rounded,
                       ),
-                      label: const Text('데스크톱 알림'),
+                      label: Text(text.desktopAlerts),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      onPressed: _savingSettings ? null : _showSettings,
+                      tooltip: text.settings,
+                      icon: Icon(Icons.settings_outlined,
+                          semanticLabel: text.settings),
                     ),
                   ],
                 ),
@@ -301,7 +358,7 @@ class _HomeState extends State<_Home> {
                               Text(watchlist.loadError!),
                               TextButton(
                                 onPressed: watchlist.load,
-                                child: const Text('다시 시도'),
+                                child: Text(text.retry),
                               ),
                             ],
                           ),
@@ -319,7 +376,7 @@ class _HomeState extends State<_Home> {
                       ),
                       children: [
                         Text(
-                          '내 소프트웨어',
+                          text.mySoftware,
                           style: Theme.of(context)
                               .textTheme
                               .headlineMedium
@@ -328,9 +385,9 @@ class _HomeState extends State<_Home> {
                               ),
                         ),
                         const SizedBox(height: 5),
-                        const Text(
-                          '등록한 앱과 개발 도구의 보안 공지를 확인하세요.',
-                          style: TextStyle(color: _muted),
+                        Text(
+                          text.homeIntro,
+                          style: TextStyle(color: colors.onSurfaceVariant),
                         ),
                         const SizedBox(height: 17),
                         Wrap(
@@ -340,12 +397,12 @@ class _HomeState extends State<_Home> {
                             FilledButton.icon(
                               onPressed: _register,
                               icon: const Icon(Icons.add_rounded),
-                              label: const Text('항목 등록'),
+                              label: Text(text.register),
                             ),
                             OutlinedButton.icon(
                               onPressed: _scanInstalled,
                               icon: const Icon(Icons.manage_search_rounded),
-                              label: const Text('설치 버전 찾기'),
+                              label: Text(text.scan),
                             ),
                             OutlinedButton.icon(
                               onPressed:
@@ -354,8 +411,9 @@ class _HomeState extends State<_Home> {
                                       ? null
                                       : watchlist.checkAll,
                               icon: const Icon(Icons.refresh_rounded),
-                              label: Text(
-                                  watchlist.checking ? '확인 중' : '보안 공지 확인'),
+                              label: Text(watchlist.checking
+                                  ? text.checking
+                                  : text.checkAdvisories),
                             ),
                           ],
                         ),
@@ -366,18 +424,20 @@ class _HomeState extends State<_Home> {
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             child: Text(
                               watchlist.storageError!,
-                              style: const TextStyle(color: _warning),
+                              style: TextStyle(color: colors.tertiary),
                             ),
                           ),
                         Row(
                           children: [
                             Expanded(
                                 child: _Metric(
-                                    label: '등록 항목', value: items.length)),
+                                    label: text.registered,
+                                    value: items.length)),
                             const SizedBox(width: 10),
                             Expanded(
                                 child: _Metric(
-                                    label: '공지 있는 항목', value: noticeCount)),
+                                    label: text.affectedItems,
+                                    value: noticeCount)),
                           ],
                         ),
                         const SizedBox(height: 15),
@@ -386,13 +446,13 @@ class _HomeState extends State<_Home> {
                           runSpacing: 7,
                           children: [
                             ChoiceChip(
-                              label: const Text('전체'),
+                              label: Text(text.all),
                               selected: _filter == null,
                               onSelected: (_) => setState(() => _filter = null),
                             ),
                             for (final category in ProductCategory.values)
                               ChoiceChip(
-                                label: Text(category.label),
+                                label: Text(text.category(category)),
                                 selected: _filter == category,
                                 onSelected: (_) =>
                                     setState(() => _filter = category),
@@ -416,9 +476,10 @@ class _HomeState extends State<_Home> {
                             ),
                           ),
                         const SizedBox(height: 12),
-                        const Text(
-                          '보안 공지 출처는 NIST NVD와 OSV예요.',
-                          style: TextStyle(fontSize: 12, color: _muted),
+                        Text(
+                          text.sources,
+                          style: TextStyle(
+                              fontSize: 12, color: colors.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -439,21 +500,26 @@ class _Metric extends StatelessWidget {
   final int value;
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: _surface,
-          border: Border.all(color: _border),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: const TextStyle(color: _muted))),
-            const SizedBox(width: 7),
-            Text('$value', style: Theme.of(context).textTheme.titleLarge),
-          ],
-        ),
-      );
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border.all(color: colors.outlineVariant),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+              child: Text(label,
+                  style: TextStyle(color: colors.onSurfaceVariant))),
+          const SizedBox(width: 7),
+          Text('$value', style: Theme.of(context).textTheme.titleLarge),
+        ],
+      ),
+    );
+  }
 }
 
 class _EmptyList extends StatelessWidget {
@@ -461,30 +527,34 @@ class _EmptyList extends StatelessWidget {
   final bool hasItems;
 
   @override
-  Widget build(BuildContext context) => Container(
-        alignment: Alignment.center,
-        padding: const EdgeInsets.all(22),
-        decoration: BoxDecoration(
-          color: _surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _border),
-        ),
-        child: Column(
-          children: [
-            const Icon(Icons.inventory_2_outlined, color: _muted),
-            const SizedBox(height: 7),
-            Text(hasItems ? '이 분류에 등록한 항목이 없어요.' : '첫 항목을 등록해 보세요.'),
-            if (!hasItems) ...[
-              const SizedBox(height: 5),
-              const Text(
-                '프로그램, 에디터, SDK, 언어와 런타임을 등록할 수 있어요.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: _muted),
-              ),
-            ],
+  Widget build(BuildContext context) {
+    final text = PatchbellText.of(context);
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.inventory_2_outlined, color: colors.onSurfaceVariant),
+          const SizedBox(height: 7),
+          Text(hasItems ? text.emptyCategory : text.addFirstItem),
+          if (!hasItems) ...[
+            const SizedBox(height: 5),
+            Text(
+              text.emptyDescription,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: colors.onSurfaceVariant),
+            ),
           ],
-        ),
-      );
+        ],
+      ),
+    );
+  }
 }
 
 class _WatchRow extends StatelessWidget {
@@ -506,20 +576,26 @@ class _WatchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final text = PatchbellText.of(context);
+    final colors = Theme.of(context).colorScheme;
+    final name = text.productName(item.product);
     final count = item.advisories.length;
     final (label, color) = switch ((checking, error, item.checkedAt, count)) {
-      (true, _, _, _) => ('확인 중', _mint),
-      (_, String _, _, _) => ('확인 실패', _warning),
-      (_, _, null, _) when !item.product.canCheck => ('공지 출처 미연결', _muted),
-      (_, _, null, _) => ('미확인', _muted),
-      (_, _, _, 0) => ('일치 공지 없음', _muted),
-      _ => ('공지 $count건', _warning),
+      (true, _, _, _) => (text.checking, colors.primary),
+      (_, String _, _, _) => (text.checkFailed, colors.tertiary),
+      (_, _, null, _) when !item.product.canCheck => (
+          text.unlinked,
+          colors.onSurfaceVariant
+        ),
+      (_, _, null, _) => (text.unchecked, colors.onSurfaceVariant),
+      (_, _, _, 0) => (text.noMatches, colors.onSurfaceVariant),
+      _ => (text.advisoryCount(count), colors.tertiary),
     };
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: _surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _border),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Row(
         children: [
@@ -535,23 +611,24 @@ class _WatchRow extends StatelessWidget {
                       width: 38,
                       height: 38,
                       decoration: BoxDecoration(
-                        color: const Color(0xff26392c),
+                        color: colors.secondaryContainer,
                         borderRadius: BorderRadius.circular(9),
                       ),
                       child: Icon(_categoryIcon(item.product.category),
-                          size: 20, color: _mint),
+                          size: 20, color: colors.primary),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(item.product.name,
+                          Text(name,
                               style:
                                   const TextStyle(fontWeight: FontWeight.w700)),
                           Text(
-                            '${item.product.category.label} · ${item.version}',
-                            style: const TextStyle(color: _muted, fontSize: 12),
+                            '${text.category(item.product.category)} · ${item.version}',
+                            style: TextStyle(
+                                color: colors.onSurfaceVariant, fontSize: 12),
                           ),
                         ],
                       ),
@@ -574,11 +651,11 @@ class _WatchRow extends StatelessWidget {
             ),
           ),
           PopupMenuButton<String>(
-            tooltip: '${item.product.name} 관리',
+            tooltip: text.manage(name),
             onSelected: (action) => action == 'edit' ? onEdit() : onRemove(),
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'edit', child: Text('항목 수정')),
-              PopupMenuItem(value: 'remove', child: Text('등록 해제')),
+            itemBuilder: (context) => [
+              PopupMenuItem(value: 'edit', child: Text(text.edit)),
+              PopupMenuItem(value: 'remove', child: Text(text.remove)),
             ],
           ),
         ],
@@ -590,73 +667,81 @@ class _WatchRow extends StatelessWidget {
 void _showDetails(BuildContext context, TrackedVersion item, [String? error]) {
   showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
-      title: Text(item.product.name),
-      scrollable: true,
-      content: SizedBox(
-        width: 470,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${item.product.category.label} · 등록 버전 ${item.version}'),
-            if (item.checkedAt != null) ...[
-              const SizedBox(height: 5),
-              Text('최근 확인 ${_date(item.checkedAt!, includeTime: true)}',
-                  style: const TextStyle(color: _muted)),
-            ],
-            if (error != null) ...[
-              const SizedBox(height: 8),
-              Text(error, style: const TextStyle(color: _warning)),
-            ],
-            const SizedBox(height: 16),
-            if (!item.product.canCheck)
-              const Text('항목 수정에서 제품이나 패키지를 연결하면 보안 공지를 확인할 수 있어요.')
-            else if (item.advisories.isEmpty && error == null)
-              Text(item.checkedAt == null
-                  ? '아직 조회한 보안 공지가 없어요.'
-                  : '이 버전에 일치하는 공개 공지가 없어요.')
-            else if (item.advisories.isNotEmpty) ...[
-              const Text('제품과 버전이 일치한 공지예요. 공지에서 운영체제와 수정 버전을 확인하세요.'),
-              const SizedBox(height: 7),
-              SizedBox(
-                width: double.infinity,
-                height: (item.advisories.length * 68.0).clamp(68.0, 250.0),
-                child: ListView.builder(
-                  primary: false,
-                  itemCount: item.advisories.length,
-                  itemBuilder: (context, index) {
-                    final advisory = item.advisories[index];
-                    final score = advisory.score?.toStringAsFixed(1);
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(advisory.id),
-                      subtitle: Text(
-                        '${_date(advisory.published)}'
-                        '${score == null ? '' : ' · CVSS $score'}',
-                      ),
-                      trailing: const Icon(Icons.open_in_new_rounded, size: 18),
-                      onTap: () => _open(context, advisory.url),
-                    );
-                  },
+    builder: (context) {
+      final text = PatchbellText.of(context);
+      final colors = Theme.of(context).colorScheme;
+      return AlertDialog(
+        title: Text(text.productName(item.product)),
+        scrollable: true,
+        content: SizedBox(
+          width: 470,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                  '${text.category(item.product.category)} · ${text.trackedVersion(item.version)}'),
+              if (item.checkedAt != null) ...[
+                const SizedBox(height: 5),
+                Text(
+                    text.lastChecked(
+                        _date(context, item.checkedAt!, includeTime: true)),
+                    style: TextStyle(color: colors.onSurfaceVariant)),
+              ],
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error, style: TextStyle(color: colors.tertiary)),
+              ],
+              const SizedBox(height: 16),
+              if (!item.product.canCheck)
+                Text(text.linkSourceToCheck)
+              else if (item.advisories.isEmpty && error == null)
+                Text(item.checkedAt == null
+                    ? text.nothingChecked
+                    : text.noVersionAdvisories)
+              else if (item.advisories.isNotEmpty) ...[
+                Text(text.advisoryDetails),
+                const SizedBox(height: 7),
+                SizedBox(
+                  width: double.infinity,
+                  height: (item.advisories.length * 68.0).clamp(68.0, 250.0),
+                  child: ListView.builder(
+                    primary: false,
+                    itemCount: item.advisories.length,
+                    itemBuilder: (context, index) {
+                      final advisory = item.advisories[index];
+                      final score = advisory.score?.toStringAsFixed(1);
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(advisory.id),
+                        subtitle: Text(
+                          '${_date(context, advisory.published)}'
+                          '${score == null ? '' : ' · CVSS $score'}',
+                        ),
+                        trailing:
+                            const Icon(Icons.open_in_new_rounded, size: 18),
+                        onTap: () => _open(context, advisory.url),
+                      );
+                    },
+                  ),
                 ),
-              ),
+              ],
             ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('닫기'),
-        ),
-        if (item.product.updateUrl case final updateUrl?)
-          FilledButton.tonalIcon(
-            onPressed: () => _open(context, Uri.parse(updateUrl)),
-            icon: const Icon(Icons.open_in_new_rounded, size: 17),
-            label: const Text('공식 업데이트 안내'),
           ),
-      ],
-    ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(text.close),
+          ),
+          if (item.product.updateUrl case final updateUrl?)
+            FilledButton.tonalIcon(
+              onPressed: () => _open(context, Uri.parse(updateUrl)),
+              icon: const Icon(Icons.open_in_new_rounded, size: 17),
+              label: Text(text.updateInstructions),
+            ),
+        ],
+      );
+    },
   );
 }

@@ -8,6 +8,7 @@ import 'advisories.dart';
 import 'catalog.dart';
 import 'desktop_alerts.dart';
 import 'npm_packages.dart';
+import 'strings.dart';
 
 const checkInterval = Duration(hours: 2);
 
@@ -100,7 +101,7 @@ class Watchlist extends ChangeNotifier {
   final NpmClient _npm;
   final DesktopAlerts _alerts;
   final _items = <TrackedVersion>[];
-  final _errors = <String, String>{};
+  final _errors = <String, LocalizedMessage>{};
   Future<void> _pendingSave = Future.value();
   Timer? _timer;
   bool _disposed = false;
@@ -111,12 +112,16 @@ class Watchlist extends ChangeNotifier {
   bool notifications = false;
   bool changingNotifications = false;
   String? checkingKey;
-  String? loadError;
-  String? storageError;
-  String? notificationMessage;
+  PatchbellText text = PatchbellText.english;
+  bool _loadFailed = false;
+  bool _storageFailed = false;
+  LocalizedMessage? _notificationMessage;
 
   List<TrackedVersion> get items => List.unmodifiable(_items);
-  String? checkError(TrackedVersion item) => _errors[item.key];
+  String? get loadError => _loadFailed ? text.loadFailed : null;
+  String? get storageError => _storageFailed ? text.storageFailed : null;
+  String? get notificationMessage => _notificationMessage?.call(text);
+  String? checkError(TrackedVersion item) => _errors[item.key]?.call(text);
   Future<CatalogPage> searchProducts(String term, {int startIndex = 0}) =>
       _client.searchProducts(term, startIndex: startIndex);
   Future<CatalogPage> searchPackages(String term, {int startIndex = 0}) =>
@@ -125,7 +130,7 @@ class Watchlist extends ChangeNotifier {
   Future<void> load() async {
     if (loaded || _loading || _disposed) return;
     _loading = true;
-    loadError = null;
+    _loadFailed = false;
     _update();
     try {
       final raw = await _preferences.getString(_storageKey);
@@ -148,7 +153,7 @@ class Watchlist extends ChangeNotifier {
       );
       unawaited(checkAll(onlyDue: true));
     } catch (error) {
-      loadError = '저장된 항목을 읽지 못했어요. 다시 시도해 주세요.';
+      _loadFailed = true;
     } finally {
       _loading = false;
       _update();
@@ -259,8 +264,8 @@ class Watchlist extends ChangeNotifier {
         try {
           await _alerts.show(
             id: item.key.hashCode & 0x7fffffff,
-            title: '${item.product.name} 보안 공지',
-            body: '등록 버전 ${item.version} · 새 보안 공지 ${fresh.length}건',
+            title: text.alertTitle(text.productName(item.product)),
+            body: text.alertBody(item.version, fresh.length),
             productId: item.product.id,
             itemKey: item.key,
           );
@@ -274,14 +279,14 @@ class Watchlist extends ChangeNotifier {
             _save();
           }
         } catch (_) {
-          notificationMessage = '데스크톱 알림을 보내지 못했어요.';
+          _notificationMessage = (text) => text.alertFailed;
         }
       }
     } catch (error) {
       if (_items.contains(item)) {
         _errors[item.key] = error is AdvisoryRequestException
             ? error.message
-            : '보안 공지를 확인하지 못했어요. 연결 상태를 확인해 주세요.';
+            : (text) => text.advisoriesFailed;
       }
     }
     _update();
@@ -290,16 +295,16 @@ class Watchlist extends ChangeNotifier {
   Future<void> setNotifications(bool enabled) async {
     if (changingNotifications) return;
     changingNotifications = true;
-    notificationMessage = null;
+    _notificationMessage = null;
     _update();
     try {
       notifications = enabled && await _alerts.requestPermission();
       if (enabled && !notifications) {
-        notificationMessage = '시스템 설정에서 Patchbell 알림을 허용해 주세요.';
+        _notificationMessage = (text) => text.alertPermission;
       }
       _save();
     } catch (_) {
-      notificationMessage = '데스크톱 알림을 켜지 못했어요.';
+      _notificationMessage = (text) => text.alertEnableFailed;
     } finally {
       changingNotifications = false;
       _update();
@@ -310,12 +315,12 @@ class Watchlist extends ChangeNotifier {
     try {
       await _alerts.show(
         id: 0,
-        title: 'Patchbell 테스트 알림',
-        body: '등록한 버전에 새 보안 공지가 생기면 이렇게 알려드려요.',
+        title: text.testAlertTitle,
+        body: text.testAlertBody,
       );
-      notificationMessage = '테스트 알림을 보냈어요.';
+      _notificationMessage = (text) => text.testAlertSent;
     } catch (_) {
-      notificationMessage = '테스트 알림을 보내지 못했어요.';
+      _notificationMessage = (text) => text.testAlertFailed;
     }
     _update();
   }
@@ -328,9 +333,9 @@ class Watchlist extends ChangeNotifier {
     _pendingSave = _pendingSave.then((_) async {
       try {
         await _preferences.setString(_storageKey, snapshot);
-        storageError = null;
+        _storageFailed = false;
       } catch (_) {
-        storageError = '변경사항을 이 기기에 저장하지 못했어요.';
+        _storageFailed = true;
       }
       _update();
     });

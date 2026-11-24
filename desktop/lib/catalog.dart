@@ -1,11 +1,8 @@
 enum ProductCategory {
-  app('일반 앱'),
-  editor('에디터'),
-  sdk('SDK'),
-  runtime('언어·런타임');
-
-  const ProductCategory(this.label);
-  final String label;
+  app,
+  editor,
+  sdk,
+  runtime,
 }
 
 class Product {
@@ -179,12 +176,12 @@ const products = [
   ),
   Product(
     id: 'dotnet',
-    name: '.NET 런타임',
+    name: '.NET Runtime',
     category: ProductCategory.runtime,
     cpe: 'microsoft:.net',
     example: '9.0.2',
     updateUrl: 'https://dotnet.microsoft.com/en-us/download/dotnet',
-    aliases: ['dotnet runtime', '닷넷'],
+    aliases: ['dotnet runtime', '.NET 런타임', '닷넷'],
   ),
   Product(
     id: 'oracle-jdk',

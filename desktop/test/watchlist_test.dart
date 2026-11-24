@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patchbell_desktop/advisories.dart';
+import 'package:patchbell_desktop/app_settings.dart';
 import 'package:patchbell_desktop/catalog.dart';
 import 'package:patchbell_desktop/desktop_alerts.dart';
 import 'package:patchbell_desktop/mac_platform.dart';
@@ -22,6 +23,7 @@ NpmClient _emptyNpm() =>
 
 class _MemoryPreferences implements SharedPreferencesAsync {
   final _values = <String, String>{};
+  final _lists = <String, List<String>>{};
   String? get saved => _values.values.firstOrNull;
 
   @override
@@ -30,6 +32,13 @@ class _MemoryPreferences implements SharedPreferencesAsync {
   @override
   Future<void> setString(String key, String value) async =>
       _values[key] = value;
+
+  @override
+  Future<List<String>?> getStringList(String key) async => _lists[key];
+
+  @override
+  Future<void> setStringList(String key, List<String> value) async =>
+      _lists[key] = List.of(value);
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -54,6 +63,11 @@ class _RecordingAlerts extends DesktopAlerts {
 }
 
 void main() {
+  final dispatcher =
+      TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher;
+  setUp(() => dispatcher.localesTestValue = const [Locale('ko')]);
+  tearDown(dispatcher.clearLocalesTestValue);
+
   test('queries the installed CPE version and collects all pages', () async {
     final calls = <Uri>[];
     final nvd = NvdClient(
@@ -176,11 +190,10 @@ void main() {
     expect(snapshots.last['affected'], [
       {
         'key': affected.key,
-        'name': 'Flutter SDK',
-        'version': '3.27.4',
-        'advisories': 2,
+        'title': 'Flutter SDK 3.27.4 · 2건',
       },
     ]);
+    expect(snapshots.last['labels'], containsPair('register', '등록하기…'));
 
     Future<void> sendMenuAction(String method, [Object? argument]) async {
       await messenger.handlePlatformMessage(
@@ -201,6 +214,67 @@ void main() {
     expect(find.text('CVE-2099-1000'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: const TargetPlatformVariant({TargetPlatform.macOS}));
+
+  testWidgets('language and theme can be changed and retained after reopening',
+      (tester) async {
+    final preferences = _MemoryPreferences();
+    final alerts = _RecordingAlerts();
+    Watchlist createWatchlist() => Watchlist(
+          preferences: preferences,
+          client: NvdClient(),
+          alerts: alerts,
+        );
+    await tester.pumpWidget(PatchbellApp(
+      watchlist: createWatchlist(),
+      preferences: preferences,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('내 소프트웨어'), findsOneWidget);
+    await tester.tap(find.byTooltip('설정'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<ThemeMode>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('다크').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('My software'), findsOneWidget);
+    expect(Theme.of(tester.element(find.text('My software'))).brightness,
+        Brightness.dark);
+    await tester.tap(find.text('Add software'));
+    await tester.pumpAndSettle();
+    expect(find.text('Search by product name'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Desktop alerts'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alerts for new advisories'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test notification'));
+    await tester.pumpAndSettle();
+    expect(alerts.titles, ['Patchbell test notification']);
+    expect(find.text('Test notification sent.'), findsOneWidget);
+
+    final settings = await AppSettings.load(preferences);
+    expect(settings.locale, const Locale('en'));
+    expect(settings.themeMode, ThemeMode.dark);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(PatchbellApp(
+      watchlist: createWatchlist(),
+      preferences: preferences,
+      settings: settings,
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('My software'), findsOneWidget);
+    expect(Theme.of(tester.element(find.text('My software'))).brightness,
+        Brightness.dark);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('registration combines presets with paginated NVD matches',
       (tester) async {

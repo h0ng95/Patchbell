@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'catalog.dart';
 import 'installed_software.dart';
 import 'mac_platform.dart';
+import 'strings.dart';
 
 class InstalledSoftwareDialog extends StatefulWidget {
   const InstalledSoftwareDialog({
@@ -26,7 +27,7 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
   final _found = <String, InstalledSoftware>{};
   final _selected = <String>{};
   bool _scanning = true;
-  String? _error;
+  LocalizedMessage? _error;
 
   @override
   void initState() {
@@ -55,12 +56,12 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
           _found.putIfAbsent(item.key, () => item);
         }
         if (folder != null && found.isEmpty) {
-          _error = '이 폴더에서 지원하는 도구의 설치 버전을 찾지 못했어요.';
+          _error = (text) => text.nothingInFolder;
         }
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _error = '설치 버전을 읽지 못했어요. 설치 폴더를 선택해 보세요.');
+        setState(() => _error = (text) => text.scanFailed);
       }
     } finally {
       if (mounted) setState(() => _scanning = false);
@@ -69,36 +70,38 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
 
   Future<void> _chooseFolder() async {
     try {
-      final folder = await getDirectoryPath(confirmButtonText: '선택');
+      final folder = await getDirectoryPath(
+        confirmButtonText: PatchbellText.of(context).select,
+      );
       if (folder != null && mounted) await _scan(folder);
     } catch (_) {
-      if (mounted) setState(() => _error = '폴더를 열지 못했어요.');
+      if (mounted) setState(() => _error = (text) => text.folderFailed);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final text = PatchbellText.of(context);
     final entries = _found.values.toList();
     final canRegister = _selected.isNotEmpty && !_scanning;
     return AlertDialog(
-      title: const Text('설치 버전 찾기'),
+      title: Text(text.scan),
       content: SizedBox(
         width: 500,
         height: (MediaQuery.sizeOf(context).height * .52).clamp(160.0, 350.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-                'Flutter, Dart, Node.js, Python, VS Code에서 추적할 버전을 고르세요.'),
+            Text(text.scanIntro),
             const SizedBox(height: 12),
             if (_scanning) const LinearProgressIndicator(),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8, bottom: 4),
-                child: Text(_error!),
+                child: Text(_error!(text)),
               ),
             if (entries.isEmpty && !_scanning && _error == null)
-              const Text('설치 버전을 찾지 못했어요. 도구가 설치된 폴더를 선택해 검색할 수 있어요.'),
+              Text(text.scanEmpty),
             if (entries.isNotEmpty)
               Expanded(
                 child: ListView.builder(
@@ -110,11 +113,14 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
                     return CheckboxListTile(
                       key: ValueKey(item.key),
                       contentPadding: EdgeInsets.zero,
-                      title: Text('${item.product.name} ${item.version}'),
+                      title: Text(
+                          '${text.productName(item.product)} ${item.version}'),
                       subtitle: Tooltip(
                         message: item.location,
                         child: Text(
-                          registered ? '등록됨 · ${item.location}' : item.location,
+                          registered
+                              ? text.trackedLocation(item.location)
+                              : item.location,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -140,11 +146,11 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
         TextButton.icon(
           onPressed: _scanning ? null : _chooseFolder,
           icon: const Icon(Icons.folder_open_rounded, size: 18),
-          label: const Text('설치 폴더 선택'),
+          label: Text(text.selectFolder),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('닫기'),
+          child: Text(text.close),
         ),
         FilledButton(
           onPressed: canRegister
@@ -155,7 +161,7 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
                         .toList(),
                   )
               : null,
-          child: Text(_selected.isEmpty ? '선택 등록' : '${_selected.length}개 등록'),
+          child: Text(text.addSelected(_selected.length)),
         ),
       ],
     );
