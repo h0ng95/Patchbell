@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="내가 쓰는 프로그램에 보안 업데이트가 필요할 때 알려주는 Windows·Mac 앱, 패치벨.">
+    <meta name="theme-color" content="#101916">
+    <title>패치벨 — 내 프로그램 보안 업데이트 알림</title>
+    <link rel="stylesheet" href="./style.css">
+    <script src="./releases.js" defer></script>
+  </head>
+  <body id="top">
+    <div class="dark">
+      <header class="site-header wrap">
+        <a class="brand" href="#top" aria-label="패치벨 홈">
+          <span class="brand-icon" aria-hidden="true"><span class="bell"></span></span>
+          Patchbell
+        </a>
+        <nav aria-label="페이지 바로가기">
+          <a href="#how">사용 방법</a>
+          <a class="nav-download" href="#download">다운로드</a>
+        </nav>
+      </header>
+    </div>
+
+    <main>
+      <div class="dark">
+        <section class="hero wrap" aria-labelledby="hero-title">
+          <div class="hero-copy">
+            <p class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span> 내 프로그램 보안 알림</p>
+            <h1 id="hero-title">내 프로그램에<br>보안 업데이트가<br><em>필요한 순간.</em></h1>
+            <p class="intro">쓰는 프로그램을 등록해 두세요. 설치한 버전이 보안 취약점의 영향을 받으면, 업데이트가 필요한 이유와 공식 안내를 알려드려요.</p>
+            <div class="hero-actions">
+              <a class="primary-button" href="#download"><span class="download-icon" aria-hidden="true"></span> 다운로드 보기</a>
+              <span>Windows · macOS</span>
+            </div>
+          </div>
+
+          <figure class="product" aria-labelledby="product-caption">
+            <div class="app-window">
+              <div class="app-bar">
+                <span class="app-brand"><span class="brand-icon brand-icon-small" aria-hidden="true"><span class="bell"></span></span> Patchbell</span>
+                <span class="sample-tag">예시 화면</span>
+              </div>
+              <div class="app-content">
+                <div class="app-title"><span>내 프로그램</span><span class="app-count">3개 등록</span></div>
+                <ul class="apps" aria-label="등록한 프로그램 예시">
+                  <li class="app-row app-row-alert">
+                    <span class="app-icon app-chrome" aria-hidden="true"><span></span></span>
+                    <span class="app-name">Google Chrome<small>설치 버전 131.0</small></span>
+                    <span class="app-status urgent">업데이트 필요</span>
+                  </li>
+                  <li class="app-row">
+                    <span class="app-icon app-code" aria-hidden="true">&lt;/&gt;</span>
+                    <span class="app-name">Visual Studio Code<small>설치 버전 1.95</small></span>
+                    <span class="app-status quiet">새 알림 없음</span>
+                  </li>
+                  <li class="app-row">
+                    <span class="app-icon app-zoom" aria-hidden="true"><span></span></span>
+                    <span class="app-name">Zoom<small>설치 버전 6.2</small></span>
+                    <span class="app-status quiet">새 알림 없음</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <figcaption class="notification" id="product-caption">
+              <span class="brand-icon notification-icon" aria-hidden="true"><span class="bell"></span></span>
+              <div>
+                <span class="notification-title">Chrome 보안 업데이트가 필요해요</span>
+                <span class="notification-copy">설치한 버전이 보안 취약점의 영향을 받아요.</span>
+                <span class="notification-action">공식 업데이트 안내 보기</span>
+              </div>
+            </figcaption>
+          </figure>
+        </section>
+
+        <section class="how wrap" id="how" aria-labelledby="how-title">
+          <h2 id="how-title">사용 방법</h2>
+          <ol class="steps">
+            <li><span class="step-icon add" aria-hidden="true"></span><div><h3>프로그램 등록</h3><p>사용하는 프로그램과 설치 버전을 등록해요.</p></div></li>
+            <li><span class="step-icon check" aria-hidden="true"></span><div><h3>영향 여부 확인</h3><p>새 보안 공지가 나오면 등록한 버전이 영향을 받는지 확인해요.</p></div></li>
+            <li><span class="step-icon step-bell" aria-hidden="true"><span class="bell"></span></span><div><h3>업데이트 알림</h3><p>조치가 필요할 때 데스크톱 알림을 받고 공식 안내를 열어요.</p></div></li>
+          </ol>
+        </section>
+      </div>
+
+      <section class="download" id="download" aria-labelledby="download-title">
+        <div class="download-inner wrap">
+          <div class="download-copy">
+            <h2 id="download-title">패치벨 다운로드</h2>
+            <p>사용하는 운영체제에 맞는 설치 파일을 확인하세요.</p>
+          </div>
+          <div class="platforms">
+            <article class="platform" data-platform="windows">
+              <span class="platform-icon" aria-hidden="true"><span class="windows-icon"><i></i><i></i><i></i><i></i></span></span>
+              <div><h3>Windows</h3><p class="platform-status">출시 준비 중</p></div>
+              <a class="platform-download" hidden>다운로드</a>
+            </article>
+            <article class="platform" data-platform="macos">
+              <span class="platform-icon" aria-hidden="true"><span class="mac-icon"></span></span>
+              <div><h3>macOS</h3><p class="platform-status">출시 준비 중</p></div>
+              <a class="platform-download" hidden>다운로드</a>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <a class="brand" href="#top" aria-label="패치벨 홈"><span class="brand-icon brand-icon-small" aria-hidden="true"><span class="bell"></span></span> Patchbell</a>
+        <span>Windows · macOS</span>
+      </div>
+    </footer>
+  </body>
+</html>
