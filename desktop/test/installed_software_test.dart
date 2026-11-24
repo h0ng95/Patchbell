@@ -58,6 +58,35 @@ void main() {
     expect(items, hasLength(6));
   });
 
+  test('finds the Windows VS Code version selected by its launcher', () async {
+    final sandbox =
+        await Directory.systemTemp.createTemp('patchbell-vscode-inventory-');
+    addTearDown(() => sandbox.delete(recursive: true));
+    final install = p.join(sandbox.path, 'Microsoft VS Code');
+
+    final launcher = File(p.join(install, 'bin', 'code.cmd'));
+    await launcher.create(recursive: true);
+    await launcher.writeAsString(
+      r'"%~dp0..\Code.exe" "%~dp0..\034f571df5\resources\app\out\cli.js" %*',
+    );
+    for (final (folder, version) in [
+      ('034f571df5', '1.118.1'),
+      ('1234567890', '1.119.0'),
+    ]) {
+      final package = p.join(install, folder, 'resources', 'app');
+      await Directory(package).create(recursive: true);
+      await File(p.join(package, 'product.json'))
+          .writeAsString('{"applicationName":"code"}');
+      await File(p.join(package, 'package.json'))
+          .writeAsString('{"version":"$version"}');
+    }
+
+    final items = await InstalledSoftwareScanner().scan(folder: sandbox.path);
+    expect(items.map((item) => item.key), ['vscode:1.118.1']);
+    expect(
+        items.single.location, await Directory(install).resolveSymbolicLinks());
+  }, skip: !Platform.isWindows);
+
   test('ignores app folders with malformed or unrecognized metadata', () async {
     final sandbox =
         await Directory.systemTemp.createTemp('patchbell-bad-inventory-');

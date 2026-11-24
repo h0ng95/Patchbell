@@ -156,17 +156,18 @@ class _Inventory {
       return a.location.compareTo(b.location);
     });
 
-  void add(String productId, String? version, String location) {
+  bool add(String productId, String? version, String location) {
     final product = productsById[productId]!;
     final cleaned = version == null ? null : product.normalizeVersion(version);
     if (cleaned == null ||
         !cleaned
             .split('.')
             .every((component) => int.tryParse(component) != null)) {
-      return;
+      return false;
     }
     final item = InstalledSoftware(product, cleaned, location);
     _found.putIfAbsent(item.key, () => item);
+    return true;
   }
 
   Future<void> inspectAll(Iterable<String> roots) async {
@@ -261,13 +262,31 @@ class _Inventory {
   }
 
   Future<void> _inspectEditor(String root) async {
-    for (final subdirectory in ['Contents/Resources/app', 'resources/app']) {
+    // The Windows launcher identifies the active resources after an update.
+    final launcher =
+        Platform.isWindows ? await _read(root, 'bin/code.cmd') : null;
+    final commitFolder = launcher == null
+        ? null
+        : RegExp(
+            r'"%~dp0\.\.\\([a-f0-9]{10})\\resources\\app\\out\\cli\.js"',
+            caseSensitive: false,
+          ).firstMatch(launcher)?[1];
+    final versionedResources =
+        commitFolder == null ? null : '$commitFolder/resources/app';
+
+    for (final subdirectory in [
+      if (versionedResources != null) versionedResources,
+      'Contents/Resources/app',
+      'resources/app',
+    ]) {
       final package = p.joinAll([root, ...subdirectory.split('/')]);
       final product = await _json(package, 'product.json');
       if (product?['applicationName'] != 'code') continue;
       final info = await _json(package, 'package.json');
       final version = info?['version'];
-      if (version is String) add('vscode', version, root);
+      if (version is! String) continue;
+      final recognized = add('vscode', version, root);
+      if (recognized && subdirectory == versionedResources) return;
     }
   }
 }
