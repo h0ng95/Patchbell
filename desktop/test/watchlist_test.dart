@@ -215,8 +215,95 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: const TargetPlatformVariant({TargetPlatform.macOS}));
 
-  testWidgets('language and theme can be changed and retained after reopening',
+  testWidgets('Windows tray badge counts items and clears after a check',
       (tester) async {
+    const channel = MethodChannel('io.github.h0ng95.patchbell/window');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    final updates = <List<Object?>>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      if (call.method == 'setTrayBadge') {
+        updates.add(call.arguments as List<Object?>);
+      }
+      return null;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+    final now = DateTime.now();
+    final affected = TrackedVersion(
+      product: productsById['flutter']!,
+      version: '3.27.4',
+      checkedAt: now,
+      advisories: [
+        Advisory(id: 'CVE-2099-1000', published: now),
+        Advisory(id: 'CVE-2099-1001', published: now),
+      ],
+    );
+    final preferences = _MemoryPreferences();
+    await preferences.setString(
+      'patchbell.watchlist.v1',
+      jsonEncode({
+        'items': [affected.toJson()],
+        'notifications': false
+      }),
+    );
+    final watchlist = Watchlist(
+      preferences: preferences,
+      client: NvdClient(
+        getPage: (_) async => {
+          'startIndex': 0,
+          'totalResults': 0,
+          'vulnerabilities': [],
+        },
+      ),
+      alerts: _RecordingAlerts(),
+    );
+    await tester.pumpWidget(PatchbellApp(watchlist: watchlist));
+    await tester.pumpAndSettle();
+    expect(updates.last,
+        [1, 'Patchbell · 확인할 항목 1개', '내 소프트웨어 열기', 'Patchbell 종료']);
+
+    await tester.tap(find.text('보안 공지 확인'));
+    await tester.pumpAndSettle();
+    expect(updates.last, [0, 'Patchbell', '내 소프트웨어 열기', 'Patchbell 종료']);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
+
+  testWidgets('Windows test notifications show banner troubleshooting',
+      (tester) async {
+    final alerts = _RecordingAlerts();
+    await tester.pumpWidget(PatchbellApp(
+      watchlist: Watchlist(
+        preferences: _MemoryPreferences(),
+        client: NvdClient(),
+        alerts: alerts,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('데스크톱 알림'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+
+    final settingsButton = find.text('Windows 알림 설정 열기');
+    expect(settingsButton, findsNothing);
+    await tester.tap(find.text('테스트 알림'));
+    await tester.pumpAndSettle();
+
+    expect(alerts.titles, ['Patchbell 테스트 알림']);
+    expect(find.text('테스트 알림을 보냈어요.'), findsOneWidget);
+    expect(find.text('배너가 안 보이면 Windows 방해 금지 설정을 확인해 주세요.'), findsOneWidget);
+    expect(settingsButton, findsOneWidget);
+
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    expect(settingsButton, findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
+
+  testWidgets('language and the top-bar theme toggle persist after reopening',
+      (tester) async {
+    dispatcher.platformBrightnessTestValue = Brightness.dark;
+    addTearDown(dispatcher.clearPlatformBrightnessTestValue);
     final preferences = _MemoryPreferences();
     final alerts = _RecordingAlerts();
     Watchlist createWatchlist() => Watchlist(
@@ -229,16 +316,22 @@ void main() {
       preferences: preferences,
     ));
     await tester.pumpAndSettle();
-    expect(find.text('내 소프트웨어'), findsOneWidget);
+    final koreanHome = find.text('내 소프트웨어');
+    expect(Theme.of(tester.element(koreanHome)).brightness, Brightness.dark);
+    await tester.tap(find.byTooltip('라이트 모드로 전환'));
+    await tester.pumpAndSettle();
+    expect(Theme.of(tester.element(koreanHome)).brightness, Brightness.light);
+    expect((await AppSettings.load(preferences)).themeMode, ThemeMode.light);
+    await tester.tap(find.byTooltip('다크 모드로 전환'));
+    await tester.pumpAndSettle();
+    expect(Theme.of(tester.element(koreanHome)).brightness, Brightness.dark);
+
     await tester.tap(find.byTooltip('설정'));
     await tester.pumpAndSettle();
+    expect(find.byType(DropdownButtonFormField<ThemeMode>), findsNothing);
     await tester.tap(find.byType(DropdownButtonFormField<String>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('English').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byType(DropdownButtonFormField<ThemeMode>));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('다크').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('저장'));
     await tester.pumpAndSettle();
@@ -273,8 +366,17 @@ void main() {
     expect(find.text('My software'), findsOneWidget);
     expect(Theme.of(tester.element(find.text('My software'))).brightness,
         Brightness.dark);
+    await tester.tap(find.byTooltip('Switch to light mode'));
+    await tester.pumpAndSettle();
+    final toggledSettings = await AppSettings.load(preferences);
+    expect(toggledSettings.locale, const Locale('en'));
+    expect(toggledSettings.themeMode, ThemeMode.light);
     await tester.pumpWidget(const SizedBox.shrink());
-  });
+  },
+      variant: const TargetPlatformVariant({
+        TargetPlatform.android,
+        TargetPlatform.windows,
+      }));
 
   testWidgets('registration combines presets with paginated NVD matches',
       (tester) async {

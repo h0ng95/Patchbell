@@ -32,7 +32,7 @@
     stepAlert: 'Get update alerts',
     stepAlertCopy: 'Get a desktop alert when action is needed, then open the official instructions.',
     downloadTitle: 'Download Patchbell',
-    downloadCopy: 'Find the installer for your operating system.',
+    downloadCopy: 'Download the file for your operating system.',
     comingSoon: 'Coming soon',
     pageTitle: 'Patchbell — Security update alerts',
     description: 'Get security update alerts for your software with Patchbell for Windows and macOS.',

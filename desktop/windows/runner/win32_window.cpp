@@ -16,7 +16,7 @@ namespace {
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-constexpr const wchar_t kWindowClassName[] = L"FLUTTER_RUNNER_WIN32_WINDOW";
+constexpr const wchar_t kWindowClassName[] = L"PATCHBELL_DESKTOP_WIN32_WINDOW";
 
 /// Registry key for app theme preference.
 ///
@@ -133,11 +133,15 @@ bool Win32Window::Create(const std::wstring& title,
   HMONITOR monitor = MonitorFromPoint(target_point, MONITOR_DEFAULTTONEAREST);
   UINT dpi = FlutterDesktopGetDpiForMonitor(monitor);
   double scale_factor = dpi / 96.0;
+  constexpr DWORD window_style = WS_OVERLAPPEDWINDOW;
+  RECT window_rect{0, 0, Scale(size.width, scale_factor),
+                   Scale(size.height, scale_factor)};
+  AdjustWindowRectExForDpi(&window_rect, window_style, FALSE, 0, dpi);
 
   HWND window = CreateWindow(
-      window_class, title.c_str(), WS_OVERLAPPEDWINDOW,
+      window_class, title.c_str(), window_style,
       Scale(origin.x, scale_factor), Scale(origin.y, scale_factor),
-      Scale(size.width, scale_factor), Scale(size.height, scale_factor),
+      window_rect.right - window_rect.left, window_rect.bottom - window_rect.top,
       nullptr, nullptr, GetModuleHandle(nullptr), this);
 
   if (!window) {
@@ -151,6 +155,10 @@ bool Win32Window::Create(const std::wstring& title,
 
 bool Win32Window::Show() {
   return ShowWindow(window_handle_, SW_SHOWNORMAL);
+}
+
+HWND Win32Window::FindExistingWindow() {
+  return FindWindowW(kWindowClassName, nullptr);
 }
 
 // static
@@ -216,6 +224,9 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+    case WM_SETTINGCHANGE:
+      UpdateTheme(hwnd);
+      break;
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
@@ -272,7 +283,36 @@ void Win32Window::OnDestroy() {
   // No-op; provided for subclasses.
 }
 
+void Win32Window::SetCaptionColors(COLORREF background, COLORREF foreground,
+                                  bool dark) {
+  caption_colors_ = CaptionColors{background, foreground, dark};
+  UpdateTheme(window_handle_);
+}
+
 void Win32Window::UpdateTheme(HWND const window) {
+  if (caption_colors_) {
+    HIGHCONTRASTW contrast{};
+    contrast.cbSize = sizeof(contrast);
+    const bool use_app_colors =
+        SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(contrast), &contrast,
+                              0) &&
+        !(contrast.dwFlags & HCF_HIGHCONTRASTON);
+    const COLORREF background = use_app_colors ? caption_colors_->background
+                                               : DWMWA_COLOR_DEFAULT;
+    const COLORREF foreground = use_app_colors ? caption_colors_->foreground
+                                               : DWMWA_COLOR_DEFAULT;
+    DwmSetWindowAttribute(window, DWMWA_CAPTION_COLOR, &background,
+                          sizeof(background));
+    DwmSetWindowAttribute(window, DWMWA_TEXT_COLOR, &foreground,
+                          sizeof(foreground));
+    if (use_app_colors) {
+      const BOOL enable_dark_mode = caption_colors_->dark;
+      DwmSetWindowAttribute(window, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                            &enable_dark_mode, sizeof(enable_dark_mode));
+      return;
+    }
+  }
+
   DWORD light_mode;
   DWORD light_mode_size = sizeof(light_mode);
   LSTATUS result = RegGetValue(HKEY_CURRENT_USER, kGetPreferredBrightnessRegKey,

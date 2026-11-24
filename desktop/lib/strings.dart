@@ -18,10 +18,9 @@ class PatchbellText {
 
   String get settings => _choose('설정', 'Settings');
   String get language => _choose('언어', 'Language');
-  String get appearance => _choose('화면 모드', 'Appearance');
   String get system => _choose('시스템 설정', 'System default');
-  String get light => _choose('라이트', 'Light');
-  String get dark => _choose('다크', 'Dark');
+  String get switchToLight => _choose('라이트 모드로 전환', 'Switch to light mode');
+  String get switchToDark => _choose('다크 모드로 전환', 'Switch to dark mode');
   String get close => _choose('닫기', 'Close');
   String get cancel => _choose('취소', 'Cancel');
   String get save => _choose('저장', 'Save');
@@ -108,6 +107,11 @@ class PatchbellText {
       _choose('데스크톱 알림을 보내지 못했어요.', 'Could not send a desktop notification.');
   String get testAlertSent =>
       _choose('테스트 알림을 보냈어요.', 'Test notification sent.');
+  String get windowsTestAlertHelp => _choose(
+      '배너가 안 보이면 Windows 방해 금지 설정을 확인해 주세요.',
+      'If you don’t see a banner, check Do not disturb in Windows Settings.');
+  String get openWindowsNotificationSettings =>
+      _choose('Windows 알림 설정 열기', 'Open Windows notification settings');
   String get testAlertFailed =>
       _choose('테스트 알림을 보내지 못했어요.', 'Could not send the test notification.');
   String get loadFailed => _choose('저장된 항목을 읽지 못했어요. 다시 시도해 주세요.',

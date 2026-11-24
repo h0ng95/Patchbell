@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -133,14 +134,22 @@ class _Home extends StatefulWidget {
 }
 
 class _HomeState extends State<_Home> {
+  static const _windowsWindowChannel =
+      MethodChannel('io.github.h0ng95.patchbell/window');
+
   ProductCategory? _filter;
   MacMenuBar? _menuBar;
   bool _savingSettings = false;
   bool _loadingStarted = false;
+  (int, int, bool)? _windowsCaption;
+  (int, String, String, String)? _windowsBadge;
 
   @override
   void initState() {
     super.initState();
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      widget.watchlist.addListener(_refreshWindowsBadge);
+    }
     if (defaultTargetPlatform == TargetPlatform.macOS) {
       _menuBar = MacMenuBar(
         watchlist: widget.watchlist,
@@ -161,10 +170,28 @@ class _HomeState extends State<_Home> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      final theme = Theme.of(context);
+      final caption = (
+        theme.scaffoldBackgroundColor.toARGB32() & 0xffffff,
+        theme.colorScheme.onSurface.toARGB32() & 0xffffff,
+        theme.brightness == Brightness.dark,
+      );
+      if (_windowsCaption != caption) {
+        _windowsCaption = caption;
+        unawaited(_updateWindowsWindow(
+          'setCaptionColors',
+          [caption.$1, caption.$2, caption.$3],
+        ));
+      }
+    }
     final current = PatchbellText.of(context);
     if (current.locale != widget.watchlist.text.locale) {
       widget.watchlist.text = current;
       _menuBar?.refresh();
+    }
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      _refreshWindowsBadge();
     }
     if (!_loadingStarted) {
       _loadingStarted = true;
@@ -172,8 +199,32 @@ class _HomeState extends State<_Home> {
     }
   }
 
+  void _refreshWindowsBadge() {
+    final watchlist = widget.watchlist;
+    final count = watchlist.affectedCount;
+    final text = watchlist.text;
+    final description = count == 0 ? 'Patchbell' : text.menuBadge(count);
+    final badge = (count, description, text.menuOpen, text.menuQuit);
+    if (_windowsBadge == badge) return;
+    _windowsBadge = badge;
+    unawaited(_updateWindowsWindow(
+      'setTrayBadge',
+      [count, description, text.menuOpen, text.menuQuit],
+    ));
+  }
+
+  Future<void> _updateWindowsWindow(
+      String method, List<Object> arguments) async {
+    try {
+      await _windowsWindowChannel.invokeMethod<Object?>(method, arguments);
+    } on MissingPluginException {
+      // Widget tests do not have a native window runner.
+    }
+  }
+
   @override
   void dispose() {
+    widget.watchlist.removeListener(_refreshWindowsBadge);
     _menuBar?.disconnect();
     super.dispose();
   }
@@ -220,9 +271,28 @@ class _HomeState extends State<_Home> {
   Future<void> _showSettings() async {
     final settings = await showDialog<AppSettings>(
       context: context,
+      barrierColor: defaultTargetPlatform == TargetPlatform.windows
+          ? Colors.black38
+          : null,
       builder: (_) => AppSettingsDialog(settings: widget.settings),
     );
     if (!mounted || settings == null) return;
+    await _saveSettings(settings);
+  }
+
+  bool get _darkMode => switch (widget.settings.themeMode) {
+        ThemeMode.light => false,
+        ThemeMode.dark => true,
+        ThemeMode.system => Theme.of(context).brightness == Brightness.dark,
+      };
+
+  Future<void> _toggleTheme() => _saveSettings(AppSettings(
+        locale: widget.settings.locale,
+        themeMode: _darkMode ? ThemeMode.light : ThemeMode.dark,
+      ));
+
+  Future<void> _saveSettings(AppSettings settings) async {
+    if (_savingSettings) return;
     setState(() => _savingSettings = true);
     final saved = await widget.onSettingsChanged(settings);
     if (!mounted) return;
@@ -242,8 +312,13 @@ class _HomeState extends State<_Home> {
         listenable: watchlist,
         builder: (context, _) {
           final text = PatchbellText.of(context);
+          final showWindowsHelp =
+              defaultTargetPlatform == TargetPlatform.windows &&
+                  watchlist.notifications &&
+                  watchlist.testAlertSent;
           return AlertDialog(
             title: Text(text.desktopAlerts),
+            scrollable: true,
             content: SizedBox(
               width: 390,
               child: Column(
@@ -264,6 +339,18 @@ class _HomeState extends State<_Home> {
                       padding: const EdgeInsets.only(top: 12),
                       child: Text(watchlist.notificationMessage!),
                     ),
+                  if (showWindowsHelp) ...[
+                    const SizedBox(height: 8),
+                    Text(text.windowsTestAlertHelp),
+                    TextButton.icon(
+                      onPressed: () => _open(
+                        context,
+                        Uri.parse('ms-settings:notifications'),
+                      ),
+                      icon: const Icon(Icons.open_in_new),
+                      label: Text(text.openWindowsNotificationSettings),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -288,7 +375,9 @@ class _HomeState extends State<_Home> {
   Widget build(BuildContext context) {
     final watchlist = widget.watchlist;
     final text = PatchbellText.of(context);
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = _darkMode;
     return ListenableBuilder(
       listenable: watchlist,
       builder: (context, _) {
@@ -297,8 +386,7 @@ class _HomeState extends State<_Home> {
             .where(
                 (item) => _filter == null || _filter == item.product.category)
             .toList();
-        final noticeCount =
-            items.where((item) => item.advisories.isNotEmpty).length;
+        final noticeCount = watchlist.affectedCount;
         return Scaffold(
           body: Column(
             children: [
@@ -311,23 +399,24 @@ class _HomeState extends State<_Home> {
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
                 child: Row(
                   children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: BoxDecoration(
-                        color: colors.primary,
-                        borderRadius: BorderRadius.circular(9),
-                      ),
-                      child: Icon(Icons.notifications_none_rounded,
-                          color: colors.onPrimary, size: 21),
+                    Image.asset(
+                      'assets/patchbell-logo.png',
+                      width: 40,
+                      height: 40,
+                      excludeFromSemantics: true,
                     ),
-                    const SizedBox(width: 10),
-                    Text('Patchbell',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            )),
-                    const Spacer(),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'Patchbell',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
                     TextButton.icon(
                       onPressed: watchlist.loaded ? _showAlerts : null,
                       icon: Icon(
@@ -338,6 +427,16 @@ class _HomeState extends State<_Home> {
                       label: Text(text.desktopAlerts),
                     ),
                     const SizedBox(width: 6),
+                    IconButton(
+                      onPressed: _savingSettings ? null : _toggleTheme,
+                      tooltip: dark ? text.switchToLight : text.switchToDark,
+                      icon: Icon(
+                        dark
+                            ? Icons.light_mode_outlined
+                            : Icons.dark_mode_outlined,
+                        size: 20,
+                      ),
+                    ),
                     IconButton(
                       onPressed: _savingSettings ? null : _showSettings,
                       tooltip: text.settings,

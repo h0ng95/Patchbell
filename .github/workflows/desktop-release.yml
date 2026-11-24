@@ -1,0 +1,176 @@
+name: Release Patchbell desktop
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: patchbell-desktop-release
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.41.9'
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-2022
+            asset: Patchbell-Windows-x64.zip
+          - platform: macos
+            runner: macos-15
+            asset: Patchbell-macOS.dmg
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter
+        shell: pwsh
+        run: |
+          $sdk = Join-Path $env:RUNNER_TEMP 'flutter'
+          git clone --depth 1 --branch $env:FLUTTER_VERSION https://github.com/flutter/flutter.git $sdk
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          (Join-Path $sdk 'bin') >> $env:GITHUB_PATH
+
+      - name: Resolve dependencies
+        working-directory: desktop
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run desktop tests
+        if: matrix.platform == 'windows'
+        working-directory: desktop
+        run: flutter test --no-pub
+
+      - name: Build and package Windows
+        if: matrix.platform == 'windows'
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          flutter build windows --release --no-pub
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          $bundle = 'build/windows/x64/runner/Release'
+          $stage = Join-Path $env:RUNNER_TEMP 'Patchbell'
+          Copy-Item -LiteralPath $bundle -Destination $stage -Recurse
+          Rename-Item -LiteralPath (Join-Path $stage 'patchbell_desktop.exe') -NewName 'Patchbell.exe'
+
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $vs = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $crt = Get-ChildItem -Path "$vs/VC/Redist/MSVC/*/x64/Microsoft.VC143.CRT" -Directory |
+            Sort-Object { [version]$_.Parent.Parent.Name } -Descending | Select-Object -First 1
+          if (!$crt) { throw 'The Visual C++ x64 redistributable was not found.' }
+          Copy-Item -Path (Join-Path $crt.FullName '*.dll') -Destination $stage
+          Compress-Archive -LiteralPath $stage -DestinationPath (Join-Path $env:RUNNER_TEMP 'Patchbell-Windows-x64.zip')
+
+      - name: Build and package macOS
+        if: matrix.platform == 'macos'
+        working-directory: desktop
+        shell: bash
+        run: |
+          flutter build macos --release --no-pub
+          app=build/macos/Build/Products/Release/Patchbell.app
+          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Patchbell"
+          codesign --verify --deep --strict "$app"
+
+          stage=$(mktemp -d)
+          ditto "$app" "$stage/Patchbell.app"
+          ln -s /Applications "$stage/Applications"
+          image="$RUNNER_TEMP/Patchbell-macOS.dmg"
+          hdiutil create -volname Patchbell -srcfolder "$stage" -format UDZO "$image"
+          hdiutil verify "$image"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: ${{ runner.temp }}/${{ matrix.asset }}
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    name: Publish downloads and prepare site
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version=$(sed -nE 's/^version: *([0-9]+\.[0-9]+\.[0-9]+)(\+[0-9]+)?$/\1/p' desktop/pubspec.yaml)
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'Expected a version such as 0.1.0 in desktop/pubspec.yaml.' >&2
+            exit 1
+          fi
+          tag="v$version"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            release_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$tag" --jq '.sha')
+            if [[ "$release_commit" != "$GITHUB_SHA" ]]; then
+              echo "Release $tag already points to a different commit. Update the app version." >&2
+              exit 1
+            fi
+          else
+            (
+              cd release
+              sha256sum Patchbell-Windows-x64.zip Patchbell-macOS.dmg > SHA256SUMS.txt
+            )
+            cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          - **Windows x64** — Extract the ZIP and open `Patchbell.exe` in the extracted folder.
+          - **macOS (Apple silicon and Intel)** — Open the DMG and drag `Patchbell.app` into Applications. This build has not been notarized by Apple.
+          - `SHA256SUMS.txt` contains the SHA-256 checksums for both downloads.
+          EOF
+            gh release create "$tag" --target "$GITHUB_SHA" --title "Patchbell $version" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" \
+              release/Patchbell-Windows-x64.zip release/Patchbell-macOS.dmg release/SHA256SUMS.txt
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > "$RUNNER_TEMP/patchbell-release.json"
+          node --input-type=module <<'EOF'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/patchbell-release.json`, 'utf8'));
+          if (release.draft) throw new Error('The release must be published before deploying downloads.');
+          const names = { windows: 'Patchbell-Windows-x64.zip', macos: 'Patchbell-macOS.dmg' };
+          const downloads = {};
+          for (const [platform, name] of Object.entries(names)) {
+            const asset = release.assets.find(asset => asset.name === name && asset.state === 'uploaded' && asset.size > 0);
+            if (!asset?.browser_download_url) throw new Error(`Missing published download ${name}`);
+            downloads[platform] = { url: asset.browser_download_url, version: release.tag_name.slice(1) };
+          }
+          writeFileSync('dist/downloads.js', `window.patchbellReleases = ${JSON.stringify(downloads, null, 2)};\n`);
+          EOF
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy download site
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

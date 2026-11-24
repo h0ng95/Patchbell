@@ -2,11 +2,28 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <memory>
+
 #include "flutter_window.h"
 #include "utils.h"
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  const HANDLE mutex =
+      CreateMutexW(nullptr, FALSE, L"Local\\io.github.h0ng95.Patchbell.desktop");
+  const auto mutex_status = GetLastError();
+  std::unique_ptr<void, decltype(&CloseHandle)> instance_mutex(mutex,
+                                                              &CloseHandle);
+  if (!instance_mutex) return EXIT_FAILURE;
+  if (mutex_status == ERROR_ALREADY_EXISTS) {
+    // A concurrent launch may arrive before the first instance creates its window.
+    for (int attempt = 0; attempt < 20; ++attempt) {
+      if (FlutterWindow::ActivateExistingWindow()) return EXIT_SUCCESS;
+      Sleep(50);
+    }
+    return EXIT_FAILURE;
+  }
+
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
@@ -26,7 +43,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+  Win32Window::Size size(800, 600);
   if (!window.Create(L"Patchbell", origin, size)) {
     return EXIT_FAILURE;
   }

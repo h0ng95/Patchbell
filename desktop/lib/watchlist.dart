@@ -12,6 +12,14 @@ import 'strings.dart';
 
 const checkInterval = Duration(hours: 2);
 
+enum _NotificationStatus {
+  alertFailed,
+  permissionRequired,
+  enableFailed,
+  testSent,
+  testFailed,
+}
+
 class TrackedVersion {
   const TrackedVersion({
     required this.product,
@@ -115,12 +123,22 @@ class Watchlist extends ChangeNotifier {
   PatchbellText text = PatchbellText.english;
   bool _loadFailed = false;
   bool _storageFailed = false;
-  LocalizedMessage? _notificationMessage;
+  _NotificationStatus? _notificationStatus;
 
   List<TrackedVersion> get items => List.unmodifiable(_items);
+  int get affectedCount =>
+      _items.where((item) => item.advisories.isNotEmpty).length;
   String? get loadError => _loadFailed ? text.loadFailed : null;
   String? get storageError => _storageFailed ? text.storageFailed : null;
-  String? get notificationMessage => _notificationMessage?.call(text);
+  bool get testAlertSent => _notificationStatus == _NotificationStatus.testSent;
+  String? get notificationMessage => switch (_notificationStatus) {
+        _NotificationStatus.alertFailed => text.alertFailed,
+        _NotificationStatus.permissionRequired => text.alertPermission,
+        _NotificationStatus.enableFailed => text.alertEnableFailed,
+        _NotificationStatus.testSent => text.testAlertSent,
+        _NotificationStatus.testFailed => text.testAlertFailed,
+        null => null,
+      };
   String? checkError(TrackedVersion item) => _errors[item.key]?.call(text);
   Future<CatalogPage> searchProducts(String term, {int startIndex = 0}) =>
       _client.searchProducts(term, startIndex: startIndex);
@@ -279,7 +297,7 @@ class Watchlist extends ChangeNotifier {
             _save();
           }
         } catch (_) {
-          _notificationMessage = (text) => text.alertFailed;
+          _notificationStatus = _NotificationStatus.alertFailed;
         }
       }
     } catch (error) {
@@ -295,16 +313,16 @@ class Watchlist extends ChangeNotifier {
   Future<void> setNotifications(bool enabled) async {
     if (changingNotifications) return;
     changingNotifications = true;
-    _notificationMessage = null;
+    _notificationStatus = null;
     _update();
     try {
       notifications = enabled && await _alerts.requestPermission();
       if (enabled && !notifications) {
-        _notificationMessage = (text) => text.alertPermission;
+        _notificationStatus = _NotificationStatus.permissionRequired;
       }
       _save();
     } catch (_) {
-      _notificationMessage = (text) => text.alertEnableFailed;
+      _notificationStatus = _NotificationStatus.enableFailed;
     } finally {
       changingNotifications = false;
       _update();
@@ -318,9 +336,9 @@ class Watchlist extends ChangeNotifier {
         title: text.testAlertTitle,
         body: text.testAlertBody,
       );
-      _notificationMessage = (text) => text.testAlertSent;
+      _notificationStatus = _NotificationStatus.testSent;
     } catch (_) {
-      _notificationMessage = (text) => text.testAlertFailed;
+      _notificationStatus = _NotificationStatus.testFailed;
     }
     _update();
   }
