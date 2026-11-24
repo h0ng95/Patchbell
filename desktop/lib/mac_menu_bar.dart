@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'mac_platform.dart';
 import 'watchlist.dart';
 
 /// Shares the running watchlist with the native macOS status menu.
@@ -10,27 +11,26 @@ class MacMenuBar {
   MacMenuBar({
     required this.watchlist,
     required this.onRegister,
+    required this.onScanInstalled,
     required this.onOpenItem,
     required this.onOpenAlerts,
   });
 
-  static const channel =
-      MethodChannel('io.github.h0ng95.patchbell/status_menu');
-
   final Watchlist watchlist;
   final VoidCallback onRegister;
+  final VoidCallback onScanInstalled;
   final ValueChanged<String> onOpenItem;
   final VoidCallback onOpenAlerts;
 
   void connect() {
-    channel.setMethodCallHandler(_handleAction);
+    macPlatformChannel.setMethodCallHandler(_handleAction);
     watchlist.addListener(_sendStatus);
     _sendStatus();
   }
 
   void disconnect() {
     watchlist.removeListener(_sendStatus);
-    channel.setMethodCallHandler(null);
+    macPlatformChannel.setMethodCallHandler(null);
   }
 
   void _sendStatus() => unawaited(_updateNativeMenu());
@@ -41,7 +41,7 @@ class MacMenuBar {
       ..sort((a, b) =>
           b.advisories.first.published.compareTo(a.advisories.first.published));
     try {
-      await channel.invokeMethod<void>('update', {
+      await macPlatformChannel.invokeMethod<void>('update', {
         'loaded': watchlist.loaded,
         'loadFailed': watchlist.loadError != null,
         'checking': watchlist.checking,
@@ -71,6 +71,8 @@ class MacMenuBar {
         _sendStatus();
       case 'register':
         onRegister();
+      case 'scanInstalled':
+        onScanInstalled();
       case 'openItem':
         if (call.arguments case final String key) onOpenItem(key);
       case 'openAlerts':

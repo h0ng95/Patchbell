@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:patchbell_desktop/advisories.dart';
 import 'package:patchbell_desktop/catalog.dart';
 import 'package:patchbell_desktop/desktop_alerts.dart';
-import 'package:patchbell_desktop/mac_menu_bar.dart';
+import 'package:patchbell_desktop/mac_platform.dart';
 import 'package:patchbell_desktop/main.dart';
 import 'package:patchbell_desktop/watchlist.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +42,7 @@ class _RecordingAlerts extends DesktopAlerts {
     required String title,
     required String body,
     String? productId,
+    String? itemKey,
   }) async {
     titles.add(title);
   }
@@ -126,13 +127,13 @@ void main() {
       (tester) async {
     final messenger = tester.binding.defaultBinaryMessenger;
     final snapshots = <Map<Object?, Object?>>[];
-    messenger.setMockMethodCallHandler(MacMenuBar.channel, (call) async {
+    messenger.setMockMethodCallHandler(macPlatformChannel, (call) async {
       expect(call.method, 'update');
       snapshots.add(call.arguments as Map<Object?, Object?>);
       return null;
     });
     addTearDown(() {
-      messenger.setMockMethodCallHandler(MacMenuBar.channel, null);
+      messenger.setMockMethodCallHandler(macPlatformChannel, null);
     });
 
     final checkedAt = DateTime.now();
@@ -178,7 +179,7 @@ void main() {
 
     Future<void> sendMenuAction(String method, [Object? argument]) async {
       await messenger.handlePlatformMessage(
-        MacMenuBar.channel.name,
+        macPlatformChannel.name,
         const StandardMethodCodec()
             .encodeMethodCall(MethodCall(method, argument)),
         (_) {},

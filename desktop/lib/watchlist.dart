@@ -250,6 +250,7 @@ class Watchlist extends ChangeNotifier {
             title: '${item.product.name} 보안 공지',
             body: '등록 버전 ${item.version} · 새 보안 공지 ${fresh.length}건',
             productId: item.product.id,
+            itemKey: item.key,
           );
           final index = _items.indexOf(checked);
           if (!_disposed && index != -1) {

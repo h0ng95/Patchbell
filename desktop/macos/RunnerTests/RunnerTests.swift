@@ -26,6 +26,7 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(badge.stringValue, "1")
     XCTAssertTrue(menu.items.contains { $0.title == "Flutter SDK 3.27.4 · 2건" })
     XCTAssertTrue(menu.items.contains { $0.title == "등록하기…" && $0.isEnabled })
+    XCTAssertTrue(menu.items.contains { $0.title == "설치 버전 찾기…" && $0.isEnabled })
 
     status.update(["loaded": true, "affected": []])
     XCTAssertTrue(badge.isHidden)

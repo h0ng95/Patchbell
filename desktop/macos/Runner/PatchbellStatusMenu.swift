@@ -1,7 +1,8 @@
 import Cocoa
 import FlutterMacOS
+import UserNotifications
 
-final class PatchbellStatusMenu: NSObject, NSMenuDelegate {
+final class PatchbellStatusMenu: NSObject, NSMenuDelegate, UNUserNotificationCenterDelegate {
   private struct AffectedItem {
     let key: String
     let name: String
@@ -32,6 +33,7 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate {
 
   private let window: NSWindow
   private let channel: FlutterMethodChannel
+  private let notificationCenter = UNUserNotificationCenter.current()
   let statusItem = NSStatusBar.system.statusItem(withLength: 28)
   private let badge = Badge(labelWithString: "")
   private var badgeWidth: NSLayoutConstraint?
@@ -51,15 +53,119 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate {
     )
     super.init()
     configureStatusItem()
+    notificationCenter.delegate = self
     channel.setMethodCallHandler { [weak self] call, result in
-      guard call.method == "update", let snapshot = call.arguments as? [String: Any] else {
+      switch call.method {
+      case "update":
+        guard let snapshot = call.arguments as? [String: Any] else {
+          result(FlutterError(code: "invalid_status", message: "Expected menu status", details: nil))
+          return
+        }
+        self?.update(snapshot)
+        result(nil)
+      case "discoveryLocations":
+        result(self?.discoveryLocations())
+      case "requestNotifications":
+        self?.requestNotifications(result)
+      case "showNotification":
+        self?.showNotification(call.arguments, result: result)
+      default:
         result(FlutterMethodNotImplemented)
-        return
       }
-      self?.update(snapshot)
-      result(nil)
     }
     channel.invokeMethod("requestStatus", arguments: nil)
+  }
+
+  private func discoveryLocations() -> [String: String] {
+    var locations = ["home": NSHomeDirectoryForUser(NSUserName()) ?? NSHomeDirectory()]
+    if let editor = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.microsoft.VSCode") {
+      locations["codePath"] = editor.path
+      locations["codeVersion"] = Bundle(url: editor)?
+        .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    }
+    return locations
+  }
+
+  private func requestNotifications(_ result: @escaping FlutterResult) {
+    notificationCenter.requestAuthorization(options: [.alert, .sound]) { granted, error in
+      DispatchQueue.main.async {
+        if let error = error {
+          result(FlutterError(code: "notification_permission", message: error.localizedDescription, details: nil))
+        } else {
+          result(granted)
+        }
+      }
+    }
+  }
+
+  private func showNotification(_ arguments: Any?, result: @escaping FlutterResult) {
+    guard let data = arguments as? [String: Any],
+          let id = data["id"] as? Int,
+          let title = data["title"] as? String,
+          let body = data["body"] as? String else {
+      result(FlutterError(code: "invalid_notification", message: nil, details: nil))
+      return
+    }
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = body
+    content.sound = .default
+    if let itemKey = data["itemKey"] as? String {
+      content.userInfo = ["itemKey": itemKey]
+    }
+    let request = UNNotificationRequest(identifier: String(id), content: content, trigger: nil)
+    notificationCenter.add(request) { [weak self] error in
+      DispatchQueue.main.async {
+        if let error = error {
+          result(FlutterError(code: "notification_delivery", message: error.localizedDescription, details: nil))
+        } else {
+          result(nil)
+          #if DEBUG
+          self?.checkDeliveredNotification(request.identifier)
+          #endif
+        }
+      }
+    }
+  }
+
+  #if DEBUG
+  private func checkDeliveredNotification(_ identifier: String) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+      self?.notificationCenter.getDeliveredNotifications { delivered in
+        NSLog("Patchbell notification in macOS Notification Center: %@",
+              String(delivered.contains { $0.request.identifier == identifier }))
+      }
+    }
+  }
+  #endif
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completion: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    if #available(macOS 11.0, *) {
+      completion([.banner, .list, .sound])
+    } else {
+      completion([.alert, .sound])
+    }
+  }
+
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completion: @escaping () -> Void
+  ) {
+    DispatchQueue.main.async {
+      if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
+        if let key = response.notification.request.content.userInfo["itemKey"] as? String {
+          self.sendWindowAction("openItem", arguments: key)
+        } else {
+          self.showWindow()
+        }
+      }
+      completion()
+    }
   }
 
   private func configureStatusItem() {
@@ -149,6 +255,7 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate {
 
     menu.addItem(.separator())
     addAction("등록하기…", #selector(register), to: menu).isEnabled = loaded
+    addAction("설치 버전 찾기…", #selector(scanInstalled), to: menu).isEnabled = loaded
     addAction("내 소프트웨어 열기", #selector(showWindow), to: menu)
     addAction("보안 공지 확인", #selector(check), to: menu).isEnabled = loaded && canCheck && !checking
     let alertSettings = addAction("데스크톱 알림…", #selector(openAlerts), to: menu)
@@ -194,6 +301,10 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate {
 
   @objc private func register() {
     sendWindowAction("register")
+  }
+
+  @objc private func scanInstalled() {
+    sendWindowAction("scanInstalled")
   }
 
   @objc private func openAlerts() {

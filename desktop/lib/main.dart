@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'advisories.dart';
 import 'catalog.dart';
 import 'desktop_alerts.dart';
+import 'installed_software.dart';
+import 'installed_software_dialog.dart';
 import 'mac_menu_bar.dart';
 import 'registration_dialog.dart';
 import 'watchlist.dart';
@@ -132,6 +134,9 @@ class _HomeState extends State<_Home> {
         onRegister: () {
           if (_canOpenMenuDialog) unawaited(_register());
         },
+        onScanInstalled: () {
+          if (_canOpenMenuDialog) unawaited(_scanInstalled());
+        },
         onOpenItem: _openMenuItem,
         onOpenAlerts: () {
           if (_canOpenMenuDialog) _showAlerts();
@@ -168,6 +173,21 @@ class _HomeState extends State<_Home> {
           RegistrationDialog(watchlist: widget.watchlist, item: item),
     );
     if (saved == true && mounted) setState(() => _filter = null);
+  }
+
+  Future<void> _scanInstalled() async {
+    final watchlist = widget.watchlist;
+    final selected = await showDialog<List<InstalledSoftware>>(
+      context: context,
+      builder: (_) => InstalledSoftwareDialog(isRegistered: watchlist.contains),
+    );
+    if (!mounted || selected == null) return;
+    for (final item in selected) {
+      if (!watchlist.contains(item.product, item.version)) {
+        watchlist.register(item.product, item.version);
+      }
+    }
+    setState(() => _filter = null);
   }
 
   void _showAlerts() {
@@ -321,6 +341,11 @@ class _HomeState extends State<_Home> {
                               onPressed: _register,
                               icon: const Icon(Icons.add_rounded),
                               label: const Text('항목 등록'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: _scanInstalled,
+                              icon: const Icon(Icons.manage_search_rounded),
+                              label: const Text('설치 버전 찾기'),
                             ),
                             OutlinedButton.icon(
                               onPressed: !items.any(

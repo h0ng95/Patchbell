@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'catalog.dart';
+import 'mac_platform.dart';
 
 class DesktopAlerts {
   final _plugin = FlutterLocalNotificationsPlugin();
@@ -23,11 +24,6 @@ class DesktopAlerts {
   Future<bool> _setup() async {
     final initialized = await _plugin.initialize(
       const InitializationSettings(
-        macOS: DarwinInitializationSettings(
-          requestAlertPermission: false,
-          requestBadgePermission: false,
-          requestSoundPermission: false,
-        ),
         windows: WindowsInitializationSettings(
           appName: 'Patchbell',
           appUserModelId: 'io.github.h0ng95.Patchbell',
@@ -39,19 +35,16 @@ class DesktopAlerts {
         if (link != null) await launchUrl(Uri.parse(link));
       },
     );
-    // With all permission prompts deferred, the macOS plugin returns false
-    // after recording the settings. Permission is requested separately.
-    return Platform.isMacOS || initialized == true;
+    return initialized == true;
   }
 
   Future<bool> requestPermission() async {
-    if (!await _initialize()) return false;
-    if (!Platform.isMacOS) return true;
-    return await _plugin
-            .resolvePlatformSpecificImplementation<
-                MacOSFlutterLocalNotificationsPlugin>()
-            ?.requestPermissions(alert: true, sound: true) ??
-        false;
+    if (Platform.isMacOS) {
+      return await macPlatformChannel
+              .invokeMethod<bool>('requestNotifications') ??
+          false;
+    }
+    return _initialize();
   }
 
   Future<void> show({
@@ -59,7 +52,17 @@ class DesktopAlerts {
     required String title,
     required String body,
     String? productId,
+    String? itemKey,
   }) async {
+    if (Platform.isMacOS) {
+      await macPlatformChannel.invokeMethod<void>('showNotification', {
+        'id': id,
+        'title': title,
+        'body': body,
+        if (itemKey != null) 'itemKey': itemKey,
+      });
+      return;
+    }
     if (!await _initialize()) {
       throw StateError('Desktop notifications could not be initialized.');
     }
