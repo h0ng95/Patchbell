@@ -5,10 +5,8 @@
     home: 'Patchbell home',
     navigation: 'Page navigation',
     language: 'Language',
-    appearance: 'Appearance',
-    system: 'System',
-    light: 'Light',
-    dark: 'Dark',
+    system: 'System default',
+    darkMode: 'Dark mode',
     how: 'How it works',
     download: 'Download',
     eyebrow: 'Security alerts for your software',
@@ -66,14 +64,19 @@
     root.dataset.theme = theme === 'system' ? systemTheme : theme;
     document.querySelector('meta[name="theme-color"]').content =
       root.dataset.theme === 'dark' ? '#101916' : '#f6f7ef';
+    document.querySelector('#theme-toggle')
+      ?.setAttribute('aria-checked', String(root.dataset.theme === 'dark'));
   }
 
   applyTheme();
   darkMode.addEventListener('change', applyTheme);
 
   document.addEventListener('DOMContentLoaded', () => {
-    const languageSelect = document.querySelector('#language');
-    const themeSelect = document.querySelector('#theme');
+    const languagePicker = document.querySelector('.language-picker');
+    const languageSummary = languagePicker.querySelector('summary');
+    const languageCode = document.querySelector('#language-code');
+    const languageOptions = languagePicker.querySelectorAll('input[name="language"]');
+    const themeToggle = document.querySelector('#theme-toggle');
     const description = document.querySelector('meta[name="description"]');
     const koreanTitle = document.title;
     const koreanDescription = description.content;
@@ -92,6 +95,8 @@
         .map(locale => locale.split('-')[0])
         .find(locale => locale === 'en' || locale === 'ko') ?? 'en';
       root.lang = language === 'system' ? systemLanguage : language;
+      languageCode.textContent = root.lang.toUpperCase();
+      for (const option of languageOptions) option.checked = option.value === language;
       const useEnglish = root.lang === 'en';
       for (const { node, attribute, key, korean } of strings) {
         const translated = useEnglish ? english[key] : korean;
@@ -103,20 +108,42 @@
       document.dispatchEvent(new Event('patchbell:language'));
     }
 
-    languageSelect.value = language;
-    themeSelect.value = theme;
-    languageSelect.addEventListener('change', () => {
-      language = languageSelect.value;
+    function setLanguage(value) {
+      language = value;
       writePreference('language', language);
       applyLanguage();
+    }
+
+    for (const option of languageOptions) {
+      option.addEventListener('change', () => setLanguage(option.value));
+      option.addEventListener('click', () => {
+        languagePicker.open = false;
+        languageSummary.focus();
+      });
+    }
+    document.addEventListener('click', event => {
+      if (!languagePicker.contains(event.target)) languagePicker.open = false;
     });
-    themeSelect.addEventListener('change', () => {
-      theme = themeSelect.value;
+    languagePicker.addEventListener('focusout', event => {
+      if (event.relatedTarget && !languagePicker.contains(event.relatedTarget)) {
+        languagePicker.open = false;
+      }
+    });
+    languagePicker.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && languagePicker.open) {
+        event.preventDefault();
+        languagePicker.open = false;
+        languageSummary.focus();
+      }
+    });
+    themeToggle.addEventListener('click', () => {
+      theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
       writePreference('theme', theme);
       applyTheme();
     });
     window.addEventListener('languagechange', applyLanguage);
     applyLanguage();
+    applyTheme();
     document.querySelector('.site-preferences').hidden = false;
   });
 })();
