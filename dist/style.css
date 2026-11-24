@@ -57,7 +57,7 @@ h1, h2, h3, p, figure { margin: 0; }
 .site-header, .footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .site-header { min-height: 82px; border-bottom: 1px solid var(--line); }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-size: 1.2rem; font-weight: 760; letter-spacing: -.035em; white-space: nowrap; }
-.brand-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 9px; background: var(--accent); color: var(--on-accent); }
+.brand-icon { display: block; flex: none; }
 .bell { position: relative; width: 12px; height: 11px; margin-top: -2px; border: 1.7px solid currentColor; border-bottom-width: 2px; border-radius: 8px 8px 2px 2px; }
 .bell::after { content: ""; position: absolute; top: 100%; left: 50%; width: 5px; height: 4px; translate: -50% 1px; border-bottom: 1.7px solid currentColor; border-radius: 50%; }
 .header-actions, .site-header nav { display: flex; align-items: center; }
@@ -204,8 +204,6 @@ h1 em { color: var(--accent); font-style: normal; }
 .app-bar, .app-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .app-bar { min-height: 59px; padding-inline: 20px; background: var(--panel-tint); border-bottom: 1px solid var(--line); }
 .app-brand { display: inline-flex; align-items: center; gap: 8px; font-size: .88rem; font-weight: 700; }
-.brand-icon-small { width: 25px; height: 25px; border-radius: 7px; }
-.brand-icon-small .bell { scale: .85; }
 .sample-tag { padding: 3px 8px; border: 1px solid var(--control-line); border-radius: 5px; color: var(--muted); font-size: .76rem; }
 .app-content { padding: 20px 20px 35px; }
 .app-title { margin-bottom: 14px; font-size: 1.22rem; font-weight: 740; letter-spacing: -.04em; }
@@ -227,7 +225,6 @@ h1 em { color: var(--accent); font-style: normal; }
 .urgent { padding: 5px 7px; border-radius: 5px; background: var(--warning-bg); color: var(--warning-ink); font-weight: 700; }
 .quiet { color: var(--muted); }
 .notification { position: absolute; right: 0; bottom: 0; display: flex; align-items: flex-start; gap: 11px; width: min(345px, 100%); padding: 14px; border: 1px solid var(--control-line); border-radius: 12px; background: var(--panel); color: var(--ink); box-shadow: 0 16px 42px var(--shadow); }
-.notification-icon { width: 32px; height: 32px; background: var(--panel-tint); color: var(--accent); }
 .notification-title, .notification-copy, .notification-action { display: block; }
 .notification-title { font-size: .875rem; font-weight: 800; }
 .notification-copy { margin-top: 4px; color: var(--muted); font-size: .77rem; line-height: 1.45; }
