@@ -35,6 +35,7 @@
     downloadTitle: 'Download Patchbell',
     downloadCopy: 'Download the file for your operating system.',
     comingSoon: 'Coming soon',
+    advertisement: 'Advertisement',
     pageTitle: 'Patchbell — Security update alerts',
     description: 'Get security update alerts for your software with Patchbell for Windows and macOS.',
   };
