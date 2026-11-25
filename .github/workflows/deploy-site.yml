@@ -1,0 +1,63 @@
+name: Deploy Patchbell homepage
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: patchbell-deploy-site
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare site downloads
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Connect published installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PATCHBELL_SUPPORT_URL: ${{ vars.PATCHBELL_SUPPORT_URL }}
+        shell: bash
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/patchbell-release.json"
+          node --input-type=module <<'EOF'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/patchbell-release.json`, 'utf8'));
+          const names = { windows: 'Patchbell-Windows-x64.zip', macos: 'Patchbell-macOS.dmg' };
+          const downloads = {};
+          for (const [platform, name] of Object.entries(names)) {
+            const asset = release.assets.find(asset => asset.name === name && asset.state === 'uploaded' && asset.size > 0);
+            if (!asset?.browser_download_url) throw new Error(`Missing published download ${name}`);
+            downloads[platform] = { url: asset.browser_download_url, version: release.tag_name.slice(1) };
+          }
+          const support = process.env.PATCHBELL_SUPPORT_URL ?? '';
+          writeFileSync('dist/downloads.js',
+            `window.patchbellReleases = ${JSON.stringify(downloads, null, 2)};\n` +
+            `window.patchbellSupportUrl = ${JSON.stringify(support)};\n`);
+          EOF
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy download site
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

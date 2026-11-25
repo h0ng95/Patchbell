@@ -19,7 +19,8 @@ Windows에서는 작업 표시줄과 시계 옆 트레이의 Patchbell 아이콘
 
 ## 버전과 공지 연결
 
-- **설치 버전 찾기**에서 Flutter, Dart, Node.js, Python, VS Code를 찾아 원하는 버전만 골라 등록합니다. Mac에서는 응용 프로그램 폴더의 앱도 이름과 설치 버전을 읽습니다. 공지 출처가 미연결된 앱은 선택 목록의 링크 버튼으로 연결할 수 있고, 다른 위치에 설치했다면 **설치 폴더 선택**을 사용합니다.
+- **설치 버전 찾기**에서 Flutter, Dart, Node.js, Python, VS Code를 찾아 원하는 버전만 골라 등록합니다. Mac의 응용 프로그램 폴더와 Windows의 설치 프로그램 목록에서도 이름과 설치 버전을 읽습니다. 공지 출처가 미연결된 앱은 선택 목록의 링크 버튼으로 연결할 수 있고, 다른 위치에 설치했다면 **설치 폴더 선택**을 사용합니다.
+- **npm 프로젝트 선택**에서 `package.json`과 `node_modules`가 있는 프로젝트의 폴더를 선택합니다. 직접 선언한 의존성 중 실제로 설치된 패키지의 버전을 읽어 선택 목록에 추가합니다. 고른 패키지와 버전은 OSV와 연결됩니다.
 - **항목 등록**에서 이름을 입력하면 빠른 선택이 바로 필터링되고, 잠시 후 NVD와 npm 검색 결과가 표시됩니다. 예를 들어 `nestjs`를 검색한 뒤 `@nestjs/core`를 고르면, 입력한 설치 버전의 공지를 OSV에서 확인합니다. 각 출처의 **결과 더 보기**로 추가 항목을 확인할 수 있습니다.
 - **직접 등록**에서 다른 제품 이름, 분류, 버전을 추가할 수 있습니다. **제품·패키지 검색 및 연결**에서 항목을 선택하면 해당 식별자로 공지를 확인합니다.
 - 검색 결과에 제품이 없으면 **공지 출처 미연결** 상태로 저장하고 나중에 **항목 수정**에서 연결할 수 있습니다.
@@ -32,3 +33,7 @@ This product uses data from the NVD API but is not endorsed or certified by the 
 ## 개발자 후원
 
 GitHub 저장소의 Actions 변수 `PATCHBELL_SUPPORT_URL`에 운영자의 공개 Buy Me a Coffee 페이지 URL을 넣으면, 새 앱 빌드와 홈페이지 배포에 후원 버튼이 표시됩니다. 로컬 앱에서는 `--dart-define=PATCHBELL_SUPPORT_URL=...`로 같은 주소를 넘길 수 있습니다.
+
+## 배포
+
+**Release Patchbell desktop** 워크플로는 Windows ZIP과 macOS DMG를 GitHub Releases에 올립니다. 홈페이지를 배포할 때는 **Deploy Patchbell homepage** 워크플로를 따로 실행합니다. 이때 최신 공개 릴리스의 설치 파일을 다운로드 버튼에 연결합니다.
