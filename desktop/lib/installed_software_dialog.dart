@@ -10,6 +10,7 @@ import 'mac_platform.dart';
 import 'registration_dialog.dart';
 import 'strings.dart';
 import 'watchlist.dart';
+import 'windows_platform.dart';
 
 class InstalledSoftwareDialog extends StatefulWidget {
   const InstalledSoftwareDialog({
@@ -28,6 +29,7 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
   final _scanner = InstalledSoftwareScanner();
   final _found = <String, InstalledSoftware>{};
   final _selected = <String>{};
+  final _listScroll = ScrollController();
   bool _scanning = true;
   LocalizedMessage? _error;
 
@@ -37,7 +39,40 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
     unawaited(_scan());
   }
 
-  Future<void> _scan([String? folder]) async {
+  @override
+  void dispose() {
+    _listScroll.dispose();
+    super.dispose();
+  }
+
+  Future<List<InstalledSoftware>> _installedSoftware(String? folder) async {
+    final macOS = defaultTargetPlatform == TargetPlatform.macOS;
+    final locations = macOS && folder == null
+        ? await macPlatformChannel
+            .invokeMapMethod<String, String>('discoveryLocations')
+        : null;
+    final macApps = macOS
+        ? await macPlatformChannel.invokeListMethod<Map<Object?, Object?>>(
+            'installedApplications', folder)
+        : null;
+    final windowsApps = defaultTargetPlatform == TargetPlatform.windows &&
+            folder == null
+        ? await windowsPlatformChannel
+            .invokeListMethod<Map<Object?, Object?>>('installedApplications')
+        : null;
+    return _scanner.scan(
+      folder: folder,
+      macLocations: locations ?? {},
+      macApplications: (macApps ?? [])
+          .map(MacInstalledApplication.fromChannel)
+          .whereType<MacInstalledApplication>(),
+      windowsApplications: (windowsApps ?? [])
+          .map(WindowsInstalledApplication.fromChannel)
+          .whereType<WindowsInstalledApplication>(),
+    );
+  }
+
+  Future<void> _scan({String? folder, bool npmProject = false}) async {
     if (folder != null) {
       setState(() {
         _scanning = true;
@@ -45,31 +80,32 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
       });
     }
     try {
-      final macOS = defaultTargetPlatform == TargetPlatform.macOS;
-      final locations = macOS && folder == null
-          ? await macPlatformChannel
-              .invokeMapMethod<String, String>('discoveryLocations')
-          : null;
-      final apps = macOS
-          ? await macPlatformChannel.invokeListMethod<Map<Object?, Object?>>(
-              'installedApplications', folder)
-          : null;
-      final found = await _scanner.scan(
-        folder: folder,
-        macLocations: locations ?? {},
-        macApplications: (apps ?? [])
-            .map(MacInstalledApplication.fromChannel)
-            .whereType<MacInstalledApplication>(),
-      );
+      final found = npmProject
+          ? await _scanner.scanNpmProject(folder!)
+          : await _installedSoftware(folder);
       if (!mounted) return;
       setState(() {
-        for (final item in found) {
-          _found.putIfAbsent(item.key, () => item);
+        if (npmProject && found.isNotEmpty) {
+          final previous = Map.of(_found);
+          _found
+            ..clear()
+            ..addEntries(found.map((item) => MapEntry(item.key, item)))
+            ..addEntries(previous.entries
+                .where((entry) => !_found.containsKey(entry.key)));
+        } else {
+          for (final item in found) {
+            _found.putIfAbsent(item.key, () => item);
+          }
         }
         if (folder != null && found.isEmpty) {
-          _error = (text) => text.nothingInFolder;
+          _error = npmProject
+              ? (text) => text.noProjectPackages
+              : (text) => text.nothingInFolder;
         }
       });
+      if (npmProject && found.isNotEmpty && _listScroll.hasClients) {
+        _listScroll.jumpTo(0);
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error = (text) => text.scanFailed);
@@ -79,12 +115,14 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
     }
   }
 
-  Future<void> _chooseFolder() async {
+  Future<void> _chooseFolder({bool npmProject = false}) async {
     try {
       final folder = await getDirectoryPath(
         confirmButtonText: PatchbellText.of(context).select,
       );
-      if (folder != null && mounted) await _scan(folder);
+      if (folder != null && mounted) {
+        await _scan(folder: folder, npmProject: npmProject);
+      }
     } catch (_) {
       if (mounted) setState(() => _error = (text) => text.folderFailed);
     }
@@ -101,7 +139,7 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
     final product = Product.custom(
       name: item.product.name,
       category: item.product.category,
-      macBundleId: item.product.macBundleId,
+      appId: item.product.appId,
       cpe: match!.cpe,
     );
     setState(() {
@@ -170,9 +208,7 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(defaultTargetPlatform == TargetPlatform.macOS
-                ? text.scanMacIntro
-                : text.scanIntro),
+            Text(text.scanIntro),
             const SizedBox(height: 12),
             if (_scanning) const LinearProgressIndicator(),
             if (_error != null)
@@ -185,6 +221,7 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
             if (entries.isNotEmpty)
               Expanded(
                 child: ListView.builder(
+                  controller: _listScroll,
                   itemCount: entries.length,
                   itemBuilder: (context, index) =>
                       _appRow(entries[index], text),
@@ -195,9 +232,14 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
       ),
       actions: [
         TextButton.icon(
-          onPressed: _scanning ? null : _chooseFolder,
+          onPressed: _scanning ? null : () => _chooseFolder(),
           icon: const Icon(Icons.folder_open_rounded, size: 18),
           label: Text(text.selectFolder),
+        ),
+        TextButton.icon(
+          onPressed: _scanning ? null : () => _chooseFolder(npmProject: true),
+          icon: const Icon(Icons.account_tree_outlined, size: 18),
+          label: Text(text.selectNpmProject),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context),

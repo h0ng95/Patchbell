@@ -17,6 +17,7 @@ import 'mac_menu_bar.dart';
 import 'registration_dialog.dart';
 import 'strings.dart';
 import 'watchlist.dart';
+import 'windows_platform.dart';
 
 final _coffeeUrl = _buyMeACoffeeUrl(
   const String.fromEnvironment('PATCHBELL_SUPPORT_URL'),
@@ -151,9 +152,6 @@ class _Home extends StatefulWidget {
 }
 
 class _HomeState extends State<_Home> {
-  static const _windowsWindowChannel =
-      MethodChannel('io.github.h0ng95.patchbell/window');
-
   ProductCategory? _filter;
   MacMenuBar? _menuBar;
   bool _savingSettings = false;
@@ -233,7 +231,7 @@ class _HomeState extends State<_Home> {
   Future<void> _updateWindowsWindow(
       String method, List<Object> arguments) async {
     try {
-      await _windowsWindowChannel.invokeMethod<Object?>(method, arguments);
+      await windowsPlatformChannel.invokeMethod<Object?>(method, arguments);
     } on MissingPluginException {
       // Widget tests do not have a native window runner.
     }

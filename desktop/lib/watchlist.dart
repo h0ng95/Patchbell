@@ -59,7 +59,7 @@ class TrackedVersion {
             'category': product.category.name,
             'cpe': product.cpe,
             if (product.npmPackage != null) 'npmPackage': product.npmPackage,
-            if (product.macBundleId != null) 'macBundleId': product.macBundleId,
+            if (product.appId != null) 'appId': product.appId,
           },
         'version': version,
         'checkedAt': checkedAt?.toIso8601String(),
@@ -69,6 +69,7 @@ class TrackedVersion {
 
   static TrackedVersion? fromJson(Map<String, dynamic> json) {
     final custom = json['custom'] as Map<String, dynamic>?;
+    final legacyBundleId = custom?['macBundleId'] as String?;
     final product = custom == null
         ? productsById[json['productId']]
         : Product.custom(
@@ -77,7 +78,8 @@ class TrackedVersion {
                 ProductCategory.values.byName(custom['category'] as String),
             cpe: custom['cpe'] as String?,
             npmPackage: custom['npmPackage'] as String?,
-            macBundleId: custom['macBundleId'] as String?,
+            appId: custom['appId'] as String? ??
+                (legacyBundleId == null ? null : 'mac:$legacyBundleId'),
           );
     final version = product?.normalizeVersion(json['version'] as String);
     if (product == null || version == null) return null;
@@ -183,8 +185,7 @@ class Watchlist extends ChangeNotifier {
   bool contains(Product product, String version, {TrackedVersion? except}) =>
       _items.any((item) =>
           (item.product.identity == product.identity ||
-              (product.macBundleId != null &&
-                  item.product.macBundleId == product.macBundleId)) &&
+              (product.appId != null && item.product.appId == product.appId)) &&
           item.version == version &&
           item.key != except?.key);
 
@@ -194,7 +195,7 @@ class Watchlist extends ChangeNotifier {
     final sameVersion = existing != null &&
         existing.product.cpe == product.cpe &&
         existing.product.npmPackage == product.npmPackage &&
-        existing.product.macBundleId == product.macBundleId &&
+        existing.product.appId == product.appId &&
         existing.version == version;
     if (sameVersion &&
         existing.product.name == product.name &&

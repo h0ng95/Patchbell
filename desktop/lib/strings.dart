@@ -181,16 +181,17 @@ class PatchbellText {
       'Could not read installed versions. Try choosing the installation folder.');
   String get folderFailed =>
       _choose('폴더를 열지 못했어요.', 'Could not open the folder.');
-  String get scanIntro => _choose(
-      'Flutter, Dart, Node.js, Python, VS Code에서 추적할 버전을 고르세요.',
-      'Choose which installed versions of Flutter, Dart, Node.js, Python, and VS Code to track.');
-  String get scanMacIntro => _choose('이 Mac에서 찾은 앱과 개발 도구 중 추적할 항목을 고르세요.',
-      'Choose which apps and developer tools on this Mac to track.');
+  String get scanIntro => _choose('이 컴퓨터에서 찾은 앱과 개발 도구 중 추적할 항목을 고르세요.',
+      'Choose which apps and developer tools on this computer to track.');
   String get scanEmpty => _choose('설치 버전을 찾지 못했어요. 도구가 설치된 폴더를 선택해 검색할 수 있어요.',
       'No installed versions found. Choose an installation folder to search.');
   String trackedLocation(String path) =>
       _choose('등록됨 · $path', 'Tracked · $path');
   String get selectFolder => _choose('설치 폴더 선택', 'Choose installation folder');
+  String get selectNpmProject => _choose('npm 프로젝트 선택', 'Choose npm project');
+  String get noProjectPackages => _choose(
+      '설치된 npm 패키지를 찾지 못했어요. package.json과 node_modules가 있는 폴더를 선택하세요.',
+      'No installed npm packages found. Choose a folder with package.json and node_modules.');
   String addSelected(int count) => _choose(count == 0 ? '선택 등록' : '$count개 등록',
       count == 0 ? 'Add selected' : 'Add $count');
 

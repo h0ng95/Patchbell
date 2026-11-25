@@ -66,7 +66,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
           category: _category,
           cpe: _linkedCpe,
           npmPackage: _linkedNpm,
-          macBundleId: widget.item?.product.macBundleId,
+          appId: widget.item?.product.appId,
         )
       : _product;
 
@@ -112,7 +112,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
       context,
       widget.watchlist,
       _name.text.trim(),
-      productsOnly: widget.item?.product.macBundleId != null,
+      productsOnly: widget.item?.product.appId != null,
     );
     if (mounted && match != null) {
       setState(() {

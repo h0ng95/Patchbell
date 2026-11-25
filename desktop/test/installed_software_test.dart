@@ -115,9 +115,9 @@ void main() {
     );
 
     expect(items.map((item) => item.key), [
-      'org.example.editor:2025.11.1-beta',
-      'org.example.editor:2025.2',
-      'org.example.secondeditor:2025.2',
+      'mac:org.example.editor:2025.11.1-beta',
+      'mac:org.example.editor:2025.2',
+      'mac:org.example.secondeditor:2025.2',
       'chrome:131.0.6778.69',
     ]);
     expect(items.last.product.cpe, 'google:chrome');
@@ -125,8 +125,87 @@ void main() {
     final original = TrackedVersion(
         product: items.first.product, version: items.first.version);
     final restored = TrackedVersion.fromJson(original.toJson())!;
-    expect(restored.product.macBundleId, 'org.example.editor');
+    expect(restored.product.appId, 'mac:org.example.editor');
     expect(restored.key, original.key);
+    final legacy = original.toJson();
+    final legacyMetadata = legacy['custom'] as Map<String, Object?>;
+    legacyMetadata
+      ..remove('appId')
+      ..['macBundleId'] = 'org.example.editor';
+    expect(TrackedVersion.fromJson(legacy)!.key, original.key);
+  });
+
+  test(
+      'Windows registry apps deduplicate and link known name and publisher pairs',
+      () async {
+    final sandbox =
+        await Directory.systemTemp.createTemp('patchbell-registry-fixture-');
+    addTearDown(() => sandbox.delete(recursive: true));
+    const chrome = WindowsInstalledApplication(
+        name: 'Google Chrome',
+        version: '131.0.6778.69',
+        publisher: 'Google LLC');
+    final items = await InstalledSoftwareScanner().scan(
+      folder: sandbox.path,
+      windowsApplications: const [
+        chrome,
+        chrome,
+        WindowsInstalledApplication(
+            name: 'Example Editor', version: '2.1', publisher: 'Example'),
+        WindowsInstalledApplication(
+            name: 'Google Chrome', version: '1.0.0', publisher: 'Unknown'),
+        WindowsInstalledApplication(name: 'Version missing', version: ''),
+      ],
+    );
+    expect(items, hasLength(3));
+    expect(items.where((item) => item.product.canCheck).single.product.cpe,
+        'google:chrome');
+    final unlinked =
+        items.firstWhere((item) => item.product.name == 'Example Editor');
+    expect(unlinked.product.appId, 'windows:example editor:example');
+    expect(unlinked.product.canCheck, isFalse);
+    expect(unlinked.location, 'Example');
+  });
+
+  test(
+      'npm project scanning uses installed package versions and supports scoped aliases',
+      () async {
+    final sandbox =
+        await Directory.systemTemp.createTemp('patchbell-npm-fixture-');
+    addTearDown(() => sandbox.delete(recursive: true));
+    Future<void> put(String path, String content) async {
+      final file = File(p.joinAll([sandbox.path, ...path.split('/')]));
+      await file.create(recursive: true);
+      await file.writeAsString(content);
+    }
+
+    await put('first/package.json', '''
+      {"dependencies":{"@nestjs/core":"^11.0.0","uninstalled":"1.2.3"},
+       "devDependencies":{"nest-alias":"npm:@nestjs/common@^11","../outside":"1.0.0"}}
+    ''');
+    await put('first/node_modules/@nestjs/core/package.json',
+        '{"name":"@nestjs/core","version":"11.1.6"}');
+    await put('first/node_modules/nest-alias/package.json',
+        '{"name":"@nestjs/common","version":"11.1.7"}');
+    await put('first/node_modules/undeclared/package.json',
+        '{"name":"undeclared","version":"4.5.6"}');
+    await put(
+        'first/outside/package.json', '{"name":"outside","version":"1.0.0"}');
+    await put(
+        'second/package.json', '{"dependencies":{"@nestjs/core":"^10.0.0"}}');
+    await put('second/node_modules/@nestjs/core/package.json',
+        '{"name":"@nestjs/core","version":"10.4.20"}');
+
+    final scanner = InstalledSoftwareScanner();
+    final first = await scanner.scanNpmProject(p.join(sandbox.path, 'first'));
+    final second = await scanner.scanNpmProject(p.join(sandbox.path, 'second'));
+    expect(first.map((item) => (item.product.npmPackage, item.version)), [
+      ('@nestjs/common', '11.1.7'),
+      ('@nestjs/core', '11.1.6'),
+    ]);
+    expect(second.single.product.npmPackage, '@nestjs/core');
+    expect(second.single.version, '10.4.20');
+    expect(second.single.key, isNot(first.last.key));
   });
 
   test('ignores app folders with malformed or unrecognized metadata', () async {

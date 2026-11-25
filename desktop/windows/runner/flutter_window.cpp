@@ -13,6 +13,7 @@
 
 #include "flutter/generated_plugin_registrant.h"
 #include "resource.h"
+#include "utils.h"
 
 namespace {
 
@@ -53,6 +54,66 @@ std::wstring ToWideString(const std::string& text) {
   }
   result.pop_back();
   return result;
+}
+
+std::string ReadRegistryText(HKEY key, const wchar_t* name) {
+  wchar_t value[2048]{};
+  DWORD size = static_cast<DWORD>(sizeof(value));
+  if (RegGetValueW(key, nullptr, name, RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ,
+                   nullptr, value, &size) != ERROR_SUCCESS) {
+    return {};
+  }
+  return Utf8FromUtf16(value);
+}
+
+void ReadUninstallEntries(HKEY hive, REGSAM view,
+                          flutter::EncodableList* entries) {
+  constexpr wchar_t path[] = LR"(Software\Microsoft\Windows\CurrentVersion\Uninstall)";
+  HKEY uninstall;
+  if (RegOpenKeyExW(hive, path, 0, KEY_ENUMERATE_SUB_KEYS | view,
+                    &uninstall) != ERROR_SUCCESS) {
+    return;
+  }
+  for (DWORD index = 0;; ++index) {
+    wchar_t subkey[256]{};
+    DWORD length = static_cast<DWORD>(sizeof(subkey) / sizeof(subkey[0]));
+    if (RegEnumKeyExW(uninstall, index, subkey, &length,
+                      nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS) {
+      break;
+    }
+    HKEY app;
+    if (RegOpenKeyExW(uninstall, subkey, 0, KEY_QUERY_VALUE | view,
+                      &app) != ERROR_SUCCESS) {
+      continue;
+    }
+    DWORD system_component = 0;
+    DWORD size = static_cast<DWORD>(sizeof(system_component));
+    RegGetValueW(app, nullptr, L"SystemComponent", RRF_RT_REG_DWORD,
+                 nullptr, &system_component, &size);
+    if (system_component == 0 && ReadRegistryText(app, L"ParentKeyName").empty()) {
+      const auto name = ReadRegistryText(app, L"DisplayName");
+      const auto version = ReadRegistryText(app, L"DisplayVersion");
+      if (!name.empty() && !version.empty()) {
+        using Value = flutter::EncodableValue;
+        entries->emplace_back(flutter::EncodableMap{
+            {Value("name"), Value(name)},
+            {Value("version"), Value(version)},
+            {Value("publisher"), Value(ReadRegistryText(app, L"Publisher"))},
+            {Value("path"), Value(ReadRegistryText(app, L"InstallLocation"))},
+        });
+      }
+    }
+    RegCloseKey(app);
+  }
+  RegCloseKey(uninstall);
+}
+
+flutter::EncodableList InstalledApplications() {
+  flutter::EncodableList entries;
+  ReadUninstallEntries(HKEY_CURRENT_USER, 0, &entries);
+  ReadUninstallEntries(HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY, &entries);
+  ReadUninstallEntries(HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY, &entries);
+  return entries;
 }
 
 int SmallIconSize(UINT dpi) {
@@ -144,6 +205,10 @@ bool FlutterWindow::OnCreate() {
       "io.github.h0ng95.patchbell/window",
       &flutter::StandardMethodCodec::GetInstance());
   window_channel.SetMethodCallHandler([this](const auto& call, auto result) {
+    if (call.method_name() == "installedApplications") {
+      result->Success(flutter::EncodableValue(InstalledApplications()));
+      return;
+    }
     const auto* args = std::get_if<flutter::EncodableList>(call.arguments());
     if (call.method_name() == "setTrayBadge") {
       if (!args || args->size() != 4) {

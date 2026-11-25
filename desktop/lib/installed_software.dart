@@ -12,7 +12,7 @@ class InstalledSoftware {
   final String version;
   final String location;
 
-  String get key => '${product.macBundleId ?? product.id}:$version';
+  String get key => '${product.appId ?? product.id}:$version';
 }
 
 class MacInstalledApplication {
@@ -43,12 +43,40 @@ class MacInstalledApplication {
   }
 }
 
+class WindowsInstalledApplication {
+  const WindowsInstalledApplication({
+    required this.name,
+    required this.version,
+    this.publisher = '',
+    this.path = '',
+  });
+
+  final String name;
+  final String version;
+  final String publisher;
+  final String path;
+
+  static WindowsInstalledApplication? fromChannel(Map<Object?, Object?> value) {
+    return switch (value) {
+      {'name': final String name, 'version': final String version} =>
+        WindowsInstalledApplication(
+          name: name,
+          version: version,
+          publisher: value['publisher'] as String? ?? '',
+          path: value['path'] as String? ?? '',
+        ),
+      _ => null,
+    };
+  }
+}
+
 /// Reads version metadata from installed products without running their tools.
 class InstalledSoftwareScanner {
   Future<List<InstalledSoftware>> scan({
     String? folder,
     Map<String, String> macLocations = const {},
     Iterable<MacInstalledApplication> macApplications = const [],
+    Iterable<WindowsInstalledApplication> windowsApplications = const [],
   }) async {
     final inventory = _Inventory();
     for (final app in macApplications) {
@@ -60,6 +88,7 @@ class InstalledSoftwareScanner {
         p.join(folder, '.fvm', 'flutter_sdk'),
         ...await _directories(folder),
       ]);
+      inventory.addWindowsApplications(windowsApplications);
       return inventory.results;
     }
 
@@ -167,8 +196,51 @@ class InstalledSoftwareScanner {
     }
 
     await inventory.inspectAll(roots);
+    inventory.addWindowsApplications(windowsApplications);
     return inventory.results;
   }
+
+  Future<List<InstalledSoftware>> scanNpmProject(String folder) async {
+    if (!p.isAbsolute(folder)) return [];
+    final project = await _json(folder, 'package.json');
+    if (project == null) return [];
+
+    final dependencies = <String>{};
+    for (final section in [
+      'dependencies',
+      'devDependencies',
+      'optionalDependencies',
+      'peerDependencies',
+    ]) {
+      final entries = project[section];
+      if (entries is Map<String, Object?>) dependencies.addAll(entries.keys);
+    }
+    final inventory = _Inventory();
+    for (final dependency in dependencies.where(_npmPackageName.hasMatch)) {
+      final location =
+          p.joinAll([folder, 'node_modules', ...dependency.split('/')]);
+      final installed = await _json(location, 'package.json');
+      final name = installed?['name'];
+      final version = installed?['version'];
+      if (name is! String ||
+          !_npmPackageName.hasMatch(name) ||
+          version is! String) {
+        continue;
+      }
+      inventory.addProduct(
+        Product.custom(
+            name: name, category: ProductCategory.sdk, npmPackage: name),
+        version,
+        folder,
+      );
+    }
+    return inventory.results;
+  }
+
+  static final _npmPackageName = RegExp(
+    r'^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$',
+    caseSensitive: false,
+  );
 }
 
 class _Inventory {
@@ -215,14 +287,64 @@ class _Inventory {
       return;
     }
 
-    final product = Product.custom(
-      name: name,
-      category: ProductCategory.app,
-      macBundleId: bundleId,
+    addProduct(
+      Product.custom(
+          name: name, category: ProductCategory.app, appId: 'mac:$bundleId'),
+      app.version,
+      app.path,
     );
-    final version = product.normalizeVersion(app.version);
-    if (version == null) return;
-    final item = InstalledSoftware(product, version, app.path);
+  }
+
+  void addWindowsApplications(
+      Iterable<WindowsInstalledApplication> applications) {
+    final hasEditorMetadata =
+        _found.values.any((item) => item.product.id == 'vscode');
+    for (final app in applications) {
+      final name = app.name.trim();
+      if (name.isEmpty) continue;
+      final publisher = app.publisher.trim();
+      final normalizedName = name.toLowerCase();
+      final vendor =
+          publisher.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final location = app.path.trim().isNotEmpty
+          ? app.path.trim()
+          : publisher.isNotEmpty
+              ? publisher
+              : 'Windows';
+      final productId = switch ((normalizedName, vendor)) {
+        ('google chrome', 'googlellc' || 'googleinc') => 'chrome',
+        ('docker desktop', 'dockerinc' || 'docker') => 'docker',
+        (
+          'microsoft visual studio code' ||
+              'microsoft visual studio code (user)',
+          'microsoftcorporation'
+        ) =>
+          'vscode',
+        (final name, 'mozilla' || 'mozillacorporation')
+            when _firefoxName.hasMatch(name) =>
+          'firefox',
+        _ => null,
+      };
+      if (productId == 'vscode' && hasEditorMetadata) continue;
+      if (productId != null && add(productId, app.version, location)) continue;
+      addProduct(
+        Product.custom(
+          name: name,
+          category: ProductCategory.app,
+          appId: 'windows:$normalizedName:${publisher.toLowerCase()}',
+        ),
+        app.version,
+        location,
+      );
+    }
+  }
+
+  static final _firefoxName = RegExp(r'^mozilla firefox(?: \([^)]+\))?$');
+
+  void addProduct(Product product, String version, String location) {
+    final normalized = product.normalizeVersion(version);
+    if (normalized == null) return;
+    final item = InstalledSoftware(product, normalized, location);
     _found.putIfAbsent(item.key, () => item);
   }
 

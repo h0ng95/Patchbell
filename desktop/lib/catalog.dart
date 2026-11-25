@@ -15,14 +15,14 @@ class Product {
     required this.updateUrl,
     this.aliases = const [],
   })  : npmPackage = null,
-        macBundleId = null;
+        appId = null;
 
   Product.custom({
     required this.name,
     required this.category,
     this.cpe,
     this.npmPackage,
-    this.macBundleId,
+    this.appId,
   })  : id = 'custom:${name.trim().toLowerCase()}',
         example = '1.2.3',
         aliases = const [],
@@ -35,13 +35,12 @@ class Product {
   final ProductCategory category;
   final String? cpe;
   final String? npmPackage;
-  final String? macBundleId;
+  final String? appId;
   final String example;
   final String? updateUrl;
   final List<String> aliases;
-  String get identity => npmPackage == null
-      ? cpe ?? (macBundleId == null ? id : 'mac:$macBundleId')
-      : 'npm:$npmPackage';
+  String get identity =>
+      npmPackage == null ? cpe ?? appId ?? id : 'npm:$npmPackage';
   bool get canCheck => npmPackage != null || cpe != null;
 
   String? normalizeVersion(String input) {
