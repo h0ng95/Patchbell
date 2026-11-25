@@ -12,7 +12,35 @@ class InstalledSoftware {
   final String version;
   final String location;
 
-  String get key => '${product.id}:$version';
+  String get key => '${product.macBundleId ?? product.id}:$version';
+}
+
+class MacInstalledApplication {
+  const MacInstalledApplication({
+    required this.bundleId,
+    required this.name,
+    required this.version,
+    required this.path,
+  });
+
+  final String bundleId;
+  final String name;
+  final String version;
+  final String path;
+
+  static MacInstalledApplication? fromChannel(Map<Object?, Object?> value) {
+    return switch (value) {
+      {
+        'bundleId': final String bundleId,
+        'name': final String name,
+        'version': final String version,
+        'path': final String path,
+      } =>
+        MacInstalledApplication(
+            bundleId: bundleId, name: name, version: version, path: path),
+      _ => null,
+    };
+  }
 }
 
 /// Reads version metadata from installed products without running their tools.
@@ -20,8 +48,12 @@ class InstalledSoftwareScanner {
   Future<List<InstalledSoftware>> scan({
     String? folder,
     Map<String, String> macLocations = const {},
+    Iterable<MacInstalledApplication> macApplications = const [],
   }) async {
     final inventory = _Inventory();
+    for (final app in macApplications) {
+      inventory.addMacApplication(app);
+    }
     if (folder != null) {
       await inventory.inspectAll([
         folder,
@@ -140,6 +172,13 @@ class InstalledSoftwareScanner {
 }
 
 class _Inventory {
+  static const _knownMacBundles = {
+    'com.google.chrome': 'chrome',
+    'com.docker.docker': 'docker',
+    'com.microsoft.vscode': 'vscode',
+    'com.jetbrains.intellij': 'intellij',
+    'org.mozilla.firefox': 'firefox',
+  };
   final _found = <String, InstalledSoftware>{};
   final _visited = <String>{};
 
@@ -147,14 +186,45 @@ class _Inventory {
     ..sort((a, b) {
       final byName = a.product.name.compareTo(b.product.name);
       if (byName != 0) return byName;
-      final left = a.version.split('.').map(int.parse).toList();
-      final right = b.version.split('.').map(int.parse).toList();
-      for (var index = 0; index < left.length; index++) {
-        final byPart = right[index].compareTo(left[index]);
+      final left = a.version.split('.');
+      final right = b.version.split('.');
+      for (var index = 0;
+          index < left.length && index < right.length;
+          index++) {
+        final leftNumber = int.tryParse(left[index]);
+        final rightNumber = int.tryParse(right[index]);
+        final byPart = switch ((leftNumber, rightNumber)) {
+          (final int left, final int right) => right.compareTo(left),
+          (int _, null) => -1,
+          (null, int _) => 1,
+          _ => right[index].compareTo(left[index]),
+        };
         if (byPart != 0) return byPart;
       }
+      final byLength = right.length.compareTo(left.length);
+      if (byLength != 0) return byLength;
       return a.location.compareTo(b.location);
     });
+
+  void addMacApplication(MacInstalledApplication app) {
+    final bundleId = app.bundleId.trim().toLowerCase();
+    final name = app.name.trim();
+    if (bundleId.isEmpty || name.isEmpty || !p.isAbsolute(app.path)) return;
+    final knownProduct = _knownMacBundles[bundleId];
+    if (knownProduct != null && add(knownProduct, app.version, app.path)) {
+      return;
+    }
+
+    final product = Product.custom(
+      name: name,
+      category: ProductCategory.app,
+      macBundleId: bundleId,
+    );
+    final version = product.normalizeVersion(app.version);
+    if (version == null) return;
+    final item = InstalledSoftware(product, version, app.path);
+    _found.putIfAbsent(item.key, () => item);
+  }
 
   bool add(String productId, String? version, String location) {
     final product = productsById[productId]!;

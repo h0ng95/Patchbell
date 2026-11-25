@@ -54,6 +54,12 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate, UNUserNotificationCen
         result(nil)
       case "discoveryLocations":
         result(self?.discoveryLocations())
+      case "installedApplications":
+        let folder = call.arguments as? String
+        DispatchQueue.global(qos: .userInitiated).async {
+          let apps = PatchbellStatusMenu.installedApplications(in: folder)
+          DispatchQueue.main.async { result(apps) }
+        }
       case "requestNotifications":
         self?.requestNotifications(result)
       case "showNotification":
@@ -73,6 +79,46 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate, UNUserNotificationCen
         .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
     }
     return locations
+  }
+
+  private static func installedApplications(in folder: String?) -> [[String: String]] {
+    let home = NSHomeDirectoryForUser(NSUserName()) ?? NSHomeDirectory()
+    let roots = folder.map { [URL(fileURLWithPath: $0, isDirectory: true)] } ?? [
+      URL(fileURLWithPath: "/Applications", isDirectory: true),
+      URL(fileURLWithPath: home, isDirectory: true).appendingPathComponent("Applications"),
+    ]
+    let files = FileManager.default
+    var apps: [[String: String]] = []
+    var visited = Set<String>()
+
+    func add(_ url: URL) {
+      guard url.pathExtension.lowercased() == "app" else { return }
+      let path = url.resolvingSymlinksInPath().path
+      guard visited.insert(path).inserted,
+            let info = NSDictionary(contentsOf: url.appendingPathComponent("Contents/Info.plist")),
+            let bundleId = info["CFBundleIdentifier"] as? String,
+            let version = info["CFBundleShortVersionString"] as? String else { return }
+      let names = [info["CFBundleDisplayName"] as? String, info["CFBundleName"] as? String]
+      let name = names.compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .first { !$0.isEmpty } ?? url.deletingPathExtension().lastPathComponent
+      apps.append(["bundleId": bundleId, "name": name, "version": version, "path": path])
+    }
+
+    for root in roots {
+      if root.pathExtension.lowercased() == "app" {
+        add(root)
+        continue
+      }
+      guard let entries = files.enumerator(
+        at: root, includingPropertiesForKeys: [.isDirectoryKey],
+        options: [.skipsHiddenFiles, .skipsPackageDescendants]
+      ) else { continue }
+      while let url = entries.nextObject() as? URL {
+        if entries.level >= 2 { entries.skipDescendants() }
+        add(url)
+      }
+    }
+    return apps
   }
 
   private func requestNotifications(_ result: @escaping FlutterResult) {

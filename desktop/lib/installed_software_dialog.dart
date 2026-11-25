@@ -7,15 +7,17 @@ import 'package:flutter/material.dart';
 import 'catalog.dart';
 import 'installed_software.dart';
 import 'mac_platform.dart';
+import 'registration_dialog.dart';
 import 'strings.dart';
+import 'watchlist.dart';
 
 class InstalledSoftwareDialog extends StatefulWidget {
   const InstalledSoftwareDialog({
     super.key,
-    required this.isRegistered,
+    required this.watchlist,
   });
 
-  final bool Function(Product, String) isRegistered;
+  final Watchlist watchlist;
 
   @override
   State<InstalledSoftwareDialog> createState() =>
@@ -43,13 +45,22 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
       });
     }
     try {
-      final locations =
-          folder == null && defaultTargetPlatform == TargetPlatform.macOS
-              ? await macPlatformChannel
-                  .invokeMapMethod<String, String>('discoveryLocations')
-              : null;
-      final found =
-          await _scanner.scan(folder: folder, macLocations: locations ?? {});
+      final macOS = defaultTargetPlatform == TargetPlatform.macOS;
+      final locations = macOS && folder == null
+          ? await macPlatformChannel
+              .invokeMapMethod<String, String>('discoveryLocations')
+          : null;
+      final apps = macOS
+          ? await macPlatformChannel.invokeListMethod<Map<Object?, Object?>>(
+              'installedApplications', folder)
+          : null;
+      final found = await _scanner.scan(
+        folder: folder,
+        macLocations: locations ?? {},
+        macApplications: (apps ?? [])
+            .map(MacInstalledApplication.fromChannel)
+            .whereType<MacInstalledApplication>(),
+      );
       if (!mounted) return;
       setState(() {
         for (final item in found) {
@@ -79,6 +90,73 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
     }
   }
 
+  Future<void> _linkApp(InstalledSoftware item) async {
+    final match = await showAdvisoryCatalog(
+      context,
+      widget.watchlist,
+      item.product.name,
+      productsOnly: true,
+    );
+    if (!mounted || match?.cpe == null) return;
+    final product = Product.custom(
+      name: item.product.name,
+      category: item.product.category,
+      macBundleId: item.product.macBundleId,
+      cpe: match!.cpe,
+    );
+    setState(() {
+      _found[item.key] =
+          InstalledSoftware(product, item.version, item.location);
+      if (widget.watchlist.contains(product, item.version)) {
+        _selected.remove(item.key);
+      }
+    });
+  }
+
+  Widget _appRow(InstalledSoftware item, PatchbellText text) {
+    final registered = widget.watchlist.contains(item.product, item.version);
+    final tile = CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text('${text.productName(item.product)} ${item.version}'),
+      subtitle: Tooltip(
+        message: item.location,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!item.product.canCheck) Text(text.unlinked),
+            Text(
+              registered ? text.trackedLocation(item.location) : item.location,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+      value: registered || _selected.contains(item.key),
+      onChanged: registered || _scanning
+          ? null
+          : (enabled) => setState(() {
+                if (enabled == true) {
+                  _selected.add(item.key);
+                } else {
+                  _selected.remove(item.key);
+                }
+              }),
+    );
+    return Row(
+      key: ValueKey(item.key),
+      children: [
+        Expanded(child: tile),
+        if (!registered && !item.product.canCheck)
+          IconButton(
+            onPressed: _scanning ? null : () => _linkApp(item),
+            tooltip: text.linkAppSource,
+            icon: Icon(Icons.link_rounded, semanticLabel: text.linkAppSource),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final text = PatchbellText.of(context);
@@ -92,7 +170,9 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(text.scanIntro),
+            Text(defaultTargetPlatform == TargetPlatform.macOS
+                ? text.scanMacIntro
+                : text.scanIntro),
             const SizedBox(height: 12),
             if (_scanning) const LinearProgressIndicator(),
             if (_error != null)
@@ -106,37 +186,8 @@ class _InstalledSoftwareDialogState extends State<InstalledSoftwareDialog> {
               Expanded(
                 child: ListView.builder(
                   itemCount: entries.length,
-                  itemBuilder: (context, index) {
-                    final item = entries[index];
-                    final registered =
-                        widget.isRegistered(item.product, item.version);
-                    return CheckboxListTile(
-                      key: ValueKey(item.key),
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                          '${text.productName(item.product)} ${item.version}'),
-                      subtitle: Tooltip(
-                        message: item.location,
-                        child: Text(
-                          registered
-                              ? text.trackedLocation(item.location)
-                              : item.location,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      value: registered || _selected.contains(item.key),
-                      onChanged: registered || _scanning
-                          ? null
-                          : (enabled) => setState(() {
-                                if (enabled == true) {
-                                  _selected.add(item.key);
-                                } else {
-                                  _selected.remove(item.key);
-                                }
-                              }),
-                    );
-                  },
+                  itemBuilder: (context, index) =>
+                      _appRow(entries[index], text),
                 ),
               ),
           ],

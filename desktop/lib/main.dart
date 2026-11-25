@@ -257,7 +257,7 @@ class _HomeState extends State<_Home> {
     final watchlist = widget.watchlist;
     final selected = await showDialog<List<InstalledSoftware>>(
       context: context,
-      builder: (_) => InstalledSoftwareDialog(isRegistered: watchlist.contains),
+      builder: (_) => InstalledSoftwareDialog(watchlist: watchlist),
     );
     if (!mounted || selected == null) return;
     for (final item in selected) {

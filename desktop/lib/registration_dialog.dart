@@ -7,6 +7,21 @@ import 'catalog.dart';
 import 'strings.dart';
 import 'watchlist.dart';
 
+Future<CatalogMatch?> showAdvisoryCatalog(
+  BuildContext context,
+  Watchlist watchlist,
+  String query, {
+  bool productsOnly = false,
+}) =>
+    showDialog<CatalogMatch>(
+      context: context,
+      builder: (_) => _CatalogDialog(
+        initialQuery: query,
+        watchlist: watchlist,
+        productsOnly: productsOnly,
+      ),
+    );
+
 class RegistrationDialog extends StatefulWidget {
   const RegistrationDialog({super.key, required this.watchlist, this.item});
 
@@ -51,6 +66,7 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
           category: _category,
           cpe: _linkedCpe,
           npmPackage: _linkedNpm,
+          macBundleId: widget.item?.product.macBundleId,
         )
       : _product;
 
@@ -92,12 +108,11 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
   }
 
   Future<void> _linkProduct() async {
-    final match = await showDialog<CatalogMatch>(
-      context: context,
-      builder: (_) => _CatalogDialog(
-        initialQuery: _name.text.trim(),
-        watchlist: widget.watchlist,
-      ),
+    final match = await showAdvisoryCatalog(
+      context,
+      widget.watchlist,
+      _name.text.trim(),
+      productsOnly: widget.item?.product.macBundleId != null,
     );
     if (mounted && match != null) {
       setState(() {
@@ -268,6 +283,7 @@ class _CatalogDialog extends StatefulWidget {
   const _CatalogDialog({
     required this.initialQuery,
     required this.watchlist,
+    this.productsOnly = false,
     this.onPreset,
     this.onMatch,
     this.onManual,
@@ -275,6 +291,7 @@ class _CatalogDialog extends StatefulWidget {
 
   final String initialQuery;
   final Watchlist watchlist;
+  final bool productsOnly;
   final ValueChanged<Product>? onPreset;
   final ValueChanged<CatalogMatch>? onMatch;
   final ValueChanged<String>? onManual;
@@ -299,13 +316,15 @@ class _CatalogDialogState extends State<_CatalogDialog> {
   bool _expandNpmResults = false;
 
   bool get _showPresets => widget.onPreset != null;
+  List<_CatalogSource> get _sources =>
+      widget.productsOnly ? const [_CatalogSource.nvd] : _CatalogSource.values;
   String get _term => _query.text.trim();
   CatalogPage? _results(_CatalogSource source) =>
       _cachedResults[(source, _term.toLowerCase())];
-  CatalogMatch? get _quickPackage =>
-      const {'nest', 'nestjs', 'nestjscore', '네스트'}.contains(_fold(_term))
-          ? _nestCore
-          : null;
+  CatalogMatch? get _quickPackage => !widget.productsOnly &&
+          const {'nest', 'nestjs', 'nestjscore', '네스트'}.contains(_fold(_term))
+      ? _nestCore
+      : null;
   bool get _searching =>
       _activeQueries.containsValue(_term) ||
       _queuedQueries.containsValue(_term) ||
@@ -344,7 +363,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
     _queuedQueries.clear();
     final term = value.trim();
     if (_fold(term).isNotEmpty &&
-        _CatalogSource.values.any((source) => _results(source) == null)) {
+        _sources.any((source) => _results(source) == null)) {
       _debounce = Timer(_typingDelay, _searchAll);
     }
     setState(() {
@@ -356,7 +375,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
 
   void _searchAll() {
     _debounce?.cancel();
-    for (final source in _CatalogSource.values) {
+    for (final source in _sources) {
       unawaited(_search(source));
     }
   }
@@ -503,7 +522,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
     };
     final noMatches = presets.isEmpty &&
         quickPackage == null &&
-        _CatalogSource.values.every((source) {
+        _sources.every((source) {
           final result = _results(source);
           return result != null &&
               result.matches.isEmpty &&
@@ -554,7 +573,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
             const SizedBox(height: 8),
             if (_searching &&
                 presetKeys.isEmpty &&
-                _CatalogSource.values.every(
+                _sources.every(
                   (source) => _results(source)?.matches.isNotEmpty != true,
                 ))
               LinearProgressIndicator(semanticsLabel: text.searching),
@@ -592,7 +611,7 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                         SliverToBoxAdapter(
                             child: _matchTile(quickPackage, text)),
                     ],
-                    for (final source in _CatalogSource.values)
+                    for (final source in _sources)
                       ..._resultSlivers(source, presetKeys, text),
                     if (noMatches)
                       SliverToBoxAdapter(

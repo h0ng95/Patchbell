@@ -160,6 +160,7 @@ class PatchbellText {
   String retrySource(String source) =>
       _choose('$source 다시 시도', 'Retry $source');
   String get linkProduct => _choose('제품·패키지 연결', 'Link a product or package');
+  String get linkAppSource => _choose('보안 공지 출처 연결', 'Link advisory source');
   String get searchLabel => _choose('제품 이름 검색', 'Search by product name');
   String get searchExample =>
       _choose('예: Python, Docker, NestJS', 'e.g. Python, Docker, NestJS');
@@ -182,6 +183,8 @@ class PatchbellText {
   String get scanIntro => _choose(
       'Flutter, Dart, Node.js, Python, VS Code에서 추적할 버전을 고르세요.',
       'Choose which installed versions of Flutter, Dart, Node.js, Python, and VS Code to track.');
+  String get scanMacIntro => _choose('이 Mac에서 찾은 앱과 개발 도구 중 추적할 항목을 고르세요.',
+      'Choose which apps and developer tools on this Mac to track.');
   String get scanEmpty => _choose('설치 버전을 찾지 못했어요. 도구가 설치된 폴더를 선택해 검색할 수 있어요.',
       'No installed versions found. Choose an installation folder to search.');
   String trackedLocation(String path) =>

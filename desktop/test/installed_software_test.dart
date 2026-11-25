@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:patchbell_desktop/installed_software.dart';
+import 'package:patchbell_desktop/watchlist.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -86,6 +87,47 @@ void main() {
     expect(
         items.single.location, await Directory(install).resolveSymbolicLinks());
   }, skip: !Platform.isWindows);
+
+  test('reads Mac app versions and links only recognized bundle identifiers',
+      () async {
+    final sandbox =
+        await Directory.systemTemp.createTemp('patchbell-app-inventory-');
+    addTearDown(() => sandbox.delete(recursive: true));
+
+    MacInstalledApplication app(String id, String name, String version) =>
+        MacInstalledApplication(
+          bundleId: id,
+          name: name,
+          version: version,
+          path: p.join(sandbox.path, '$name.app'),
+        );
+
+    final items = await InstalledSoftwareScanner().scan(
+      folder: sandbox.path,
+      macApplications: [
+        app('com.google.Chrome', 'Google Chrome', '131.0.6778.69'),
+        app('org.example.Editor', 'Editor', '2025.2'),
+        app('org.example.Editor', 'Editor', '2025.11.1-beta'),
+        app('org.example.Editor', 'Editor', '2025.2'),
+        app('org.example.SecondEditor', 'Editor', '2025.2'),
+        app('org.example.NoVersion', 'No Version', ''),
+      ],
+    );
+
+    expect(items.map((item) => item.key), [
+      'org.example.editor:2025.11.1-beta',
+      'org.example.editor:2025.2',
+      'org.example.secondeditor:2025.2',
+      'chrome:131.0.6778.69',
+    ]);
+    expect(items.last.product.cpe, 'google:chrome');
+    expect(items.first.product.cpe, isNull);
+    final original = TrackedVersion(
+        product: items.first.product, version: items.first.version);
+    final restored = TrackedVersion.fromJson(original.toJson())!;
+    expect(restored.product.macBundleId, 'org.example.editor');
+    expect(restored.key, original.key);
+  });
 
   test('ignores app folders with malformed or unrecognized metadata', () async {
     final sandbox =

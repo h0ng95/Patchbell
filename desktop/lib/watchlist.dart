@@ -59,6 +59,7 @@ class TrackedVersion {
             'category': product.category.name,
             'cpe': product.cpe,
             if (product.npmPackage != null) 'npmPackage': product.npmPackage,
+            if (product.macBundleId != null) 'macBundleId': product.macBundleId,
           },
         'version': version,
         'checkedAt': checkedAt?.toIso8601String(),
@@ -76,6 +77,7 @@ class TrackedVersion {
                 ProductCategory.values.byName(custom['category'] as String),
             cpe: custom['cpe'] as String?,
             npmPackage: custom['npmPackage'] as String?,
+            macBundleId: custom['macBundleId'] as String?,
           );
     final version = product?.normalizeVersion(json['version'] as String);
     if (product == null || version == null) return null;
@@ -180,7 +182,9 @@ class Watchlist extends ChangeNotifier {
 
   bool contains(Product product, String version, {TrackedVersion? except}) =>
       _items.any((item) =>
-          item.product.identity == product.identity &&
+          (item.product.identity == product.identity ||
+              (product.macBundleId != null &&
+                  item.product.macBundleId == product.macBundleId)) &&
           item.version == version &&
           item.key != except?.key);
 
@@ -190,6 +194,7 @@ class Watchlist extends ChangeNotifier {
     final sameVersion = existing != null &&
         existing.product.cpe == product.cpe &&
         existing.product.npmPackage == product.npmPackage &&
+        existing.product.macBundleId == product.macBundleId &&
         existing.version == version;
     if (sameVersion &&
         existing.product.name == product.name &&
