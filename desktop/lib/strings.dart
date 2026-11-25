@@ -17,6 +17,7 @@ class PatchbellText {
       count == 1 ? singular : plural;
 
   String get settings => _choose('설정', 'Settings');
+  String get buyMeACoffee => _choose('개발자에게 커피 한 잔', 'Buy me a coffee');
   String get language => _choose('언어', 'Language');
   String get system => _choose('시스템 설정', 'System default');
   String get switchToLight => _choose('라이트 모드로 전환', 'Switch to light mode');

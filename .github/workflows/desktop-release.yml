@@ -12,6 +12,7 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.41.9'
+  PATCHBELL_SUPPORT_URL: ${{ vars.PATCHBELL_SUPPORT_URL }}
 
 jobs:
   build:
@@ -56,7 +57,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          flutter build windows --release --no-pub
+          flutter build windows --release --no-pub "--dart-define=PATCHBELL_SUPPORT_URL=$env:PATCHBELL_SUPPORT_URL"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           $bundle = 'build/windows/x64/runner/Release'
@@ -77,7 +78,7 @@ jobs:
         working-directory: desktop
         shell: bash
         run: |
-          flutter build macos --release --no-pub
+          flutter build macos --release --no-pub "--dart-define=PATCHBELL_SUPPORT_URL=$PATCHBELL_SUPPORT_URL"
           app=build/macos/Build/Products/Release/Patchbell.app
           lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Patchbell"
           codesign --verify --deep --strict "$app"
@@ -154,7 +155,10 @@ jobs:
             if (!asset?.browser_download_url) throw new Error(`Missing published download ${name}`);
             downloads[platform] = { url: asset.browser_download_url, version: release.tag_name.slice(1) };
           }
-          writeFileSync('dist/downloads.js', `window.patchbellReleases = ${JSON.stringify(downloads, null, 2)};\n`);
+          const support = process.env.PATCHBELL_SUPPORT_URL ?? '';
+          writeFileSync('dist/downloads.js',
+            `window.patchbellReleases = ${JSON.stringify(downloads, null, 2)};\n` +
+            `window.patchbellSupportUrl = ${JSON.stringify(support)};\n`);
           EOF
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4

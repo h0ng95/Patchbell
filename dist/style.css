@@ -66,6 +66,41 @@ h1, h2, h3, p, figure { margin: 0; }
 .site-header nav a:hover { color: var(--ink); }
 .nav-download { padding: 9px 14px; border: 1px solid var(--control-line); border-radius: 8px; color: var(--ink); }
 .nav-download:hover { background: var(--panel-tint); }
+.nav-coffee {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 36px;
+  padding-inline: 5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.coffee-icon {
+  position: relative;
+  width: 11px;
+  height: 9px;
+  margin-right: 4px;
+  margin-bottom: 2px;
+  border: 1.3px solid currentColor;
+  border-radius: 2px 2px 4px 4px;
+}
+.coffee-icon::before, .coffee-icon::after { content: ""; position: absolute; }
+.coffee-icon::before {
+  top: 0;
+  left: 100%;
+  width: 4px;
+  height: 5px;
+  border: 1.3px solid currentColor;
+  border-left: 0;
+  border-radius: 0 3px 3px 0;
+}
+.coffee-icon::after {
+  top: calc(100% + 2px);
+  left: -2px;
+  width: 13px;
+  border-bottom: 1.3px solid currentColor;
+}
 .site-preferences { display: flex; align-items: center; gap: 8px; }
 .language-picker { position: relative; }
 .language-picker summary {
@@ -272,6 +307,8 @@ h1 em { color: var(--accent); font-style: normal; }
   .header-actions { gap: 10px; }
   .site-header nav { gap: 13px; }
   .nav-download { padding: 7px 9px; }
+  .nav-coffee { min-width: 36px; }
+  .nav-coffee [data-i18n] { display: none; }
   .hero { grid-template-columns: 1fr; gap: 35px; min-height: 0; padding-block: 45px 44px; }
   .hero::before { inset: 38% 0 0; }
   h1 { font-size: clamp(2.65rem, 9vw, 4rem); }

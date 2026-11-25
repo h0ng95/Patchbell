@@ -9,6 +9,7 @@
     darkMode: 'Dark mode',
     how: 'How it works',
     download: 'Download',
+    coffee: 'Buy me a coffee',
     eyebrow: 'Security alerts for your software',
     heroFirst: 'Security updates',
     heroSecond: 'for the software',
@@ -78,6 +79,7 @@
     const languageOptions = languagePicker.querySelectorAll('input[name="language"]');
     const themeToggle = document.querySelector('#theme-toggle');
     const description = document.querySelector('meta[name="description"]');
+    const coffeeLink = document.querySelector('.nav-coffee');
     const koreanTitle = document.title;
     const koreanDescription = description.content;
     const strings = [...document.querySelectorAll('[data-i18n], [data-i18n-label]')].map(node => {
@@ -145,5 +147,17 @@
     applyLanguage();
     applyTheme();
     document.querySelector('.site-preferences').hidden = false;
+    try {
+      const url = new URL(window.patchbellSupportUrl);
+      if (url.protocol === 'https:' &&
+          ['buymeacoffee.com', 'www.buymeacoffee.com'].includes(url.hostname) &&
+          !url.port && !url.username && !url.password &&
+          /^\/[a-zA-Z0-9_-]+\/?$/.test(url.pathname)) {
+        coffeeLink.href = url.origin + url.pathname;
+        coffeeLink.hidden = false;
+      }
+    } catch {
+      // Show the link once a creator page has been configured.
+    }
   });
 })();

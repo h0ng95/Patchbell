@@ -28,3 +28,7 @@ Windows에서는 작업 표시줄과 시계 옆 트레이의 Patchbell 아이콘
 - 조회 결과와 등록 목록은 이 기기에 저장합니다. 검색어를 NVD와 공개 npm 레지스트리에 보내며, 공지 조회 시 연결된 제품이나 패키지 식별자와 버전을 NVD 또는 OSV에 보냅니다. 세부 적용 조건과 수정 버전은 공지 원문에서 확인할 수 있습니다.
 
 This product uses data from the NVD API but is not endorsed or certified by the NVD. [NVD Product APIs](https://nvd.nist.gov/developers/products)
+
+## 개발자 후원
+
+GitHub 저장소의 Actions 변수 `PATCHBELL_SUPPORT_URL`에 운영자의 공개 Buy Me a Coffee 페이지 URL을 넣으면, 새 앱 빌드와 홈페이지 배포에 후원 버튼이 표시됩니다. 로컬 앱에서는 `--dart-define=PATCHBELL_SUPPORT_URL=...`로 같은 주소를 넘길 수 있습니다.

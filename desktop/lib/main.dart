@@ -18,6 +18,23 @@ import 'registration_dialog.dart';
 import 'strings.dart';
 import 'watchlist.dart';
 
+final _coffeeUrl = _buyMeACoffeeUrl(
+  const String.fromEnvironment('PATCHBELL_SUPPORT_URL'),
+);
+
+Uri? _buyMeACoffeeUrl(String value) {
+  final url = Uri.tryParse(value.trim());
+  if (url == null ||
+      url.scheme != 'https' ||
+      !const {'buymeacoffee.com', 'www.buymeacoffee.com'}.contains(url.host) ||
+      url.hasPort ||
+      url.userInfo.isNotEmpty ||
+      !RegExp(r'^/[a-zA-Z0-9_-]+/?$').hasMatch(url.path)) {
+    return null;
+  }
+  return Uri.https(url.host, url.path);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final preferences = SharedPreferencesAsync();
@@ -417,6 +434,20 @@ class _HomeState extends State<_Home> {
                         ),
                       ),
                     ),
+                    if (_coffeeUrl case final url?)
+                      if (MediaQuery.sizeOf(context).width >= 640)
+                        TextButton.icon(
+                          onPressed: () => _open(context, url),
+                          icon: const Icon(Icons.coffee_outlined, size: 18),
+                          label: Text(text.buyMeACoffee),
+                        )
+                      else
+                        IconButton(
+                          onPressed: () => _open(context, url),
+                          tooltip: text.buyMeACoffee,
+                          icon: Icon(Icons.coffee_outlined,
+                              semanticLabel: text.buyMeACoffee, size: 20),
+                        ),
                     TextButton.icon(
                       onPressed: watchlist.loaded ? _showAlerts : null,
                       icon: Icon(
