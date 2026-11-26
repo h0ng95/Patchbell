@@ -21,10 +21,11 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Connect published installers
+      - name: Configure downloads and homepage settings
         env:
           GH_TOKEN: ${{ github.token }}
           PATCHBELL_SUPPORT_URL: ${{ vars.PATCHBELL_SUPPORT_URL }}
+          PATCHBELL_GA_MEASUREMENT_ID: ${{ vars.PATCHBELL_GA_MEASUREMENT_ID }}
         shell: bash
         run: |
           gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/patchbell-release.json"
@@ -39,9 +40,14 @@ jobs:
             downloads[platform] = { url: asset.browser_download_url, version: release.tag_name.slice(1) };
           }
           const support = process.env.PATCHBELL_SUPPORT_URL ?? '';
+          const analyticsId = (process.env.PATCHBELL_GA_MEASUREMENT_ID ?? '').trim();
+          if (analyticsId && !/^G-[A-Z0-9]+$/.test(analyticsId)) {
+            throw new Error('PATCHBELL_GA_MEASUREMENT_ID must be a GA4 measurement ID.');
+          }
           writeFileSync('dist/downloads.js',
             `window.patchbellReleases = ${JSON.stringify(downloads, null, 2)};\n` +
-            `window.patchbellSupportUrl = ${JSON.stringify(support)};\n`);
+            `window.patchbellSupportUrl = ${JSON.stringify(support)};\n` +
+            `window.patchbellAnalyticsId = ${JSON.stringify(analyticsId)};\n`);
           EOF
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4

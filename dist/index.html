@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="./style.css">
     <script src="./downloads.js" defer></script>
     <script src="./releases.js" defer></script>
+    <script src="./analytics.js" defer></script>
   </head>
   <body id="top">
     <div class="main-surface">
@@ -146,8 +147,20 @@
     <footer class="site-footer">
       <div class="wrap footer-inner">
         <a class="brand" href="#top" aria-label="패치벨 홈" data-i18n-label="home"><img class="brand-icon" src="./patchbell-logo.png" width="30" height="30" alt=""> Patchbell</a>
-        <span>Windows · macOS</span>
+        <div class="footer-details">
+          <button type="button" id="analytics-settings" aria-controls="analytics-choice"
+                  aria-expanded="false" data-i18n="analyticsSettings" hidden>방문 통계 설정</button>
+          <span>Windows · macOS</span>
+        </div>
       </div>
     </footer>
+    <section class="analytics-choice" id="analytics-choice" aria-labelledby="analytics-title" hidden>
+      <h2 id="analytics-title" data-i18n="analyticsTitle">방문 통계 사용 여부</h2>
+      <p id="analytics-description" data-i18n="analyticsDescription">홈페이지를 개선하기 위해 Google Analytics로 방문 통계를 수집해도 될까요?</p>
+      <div class="analytics-actions" aria-describedby="analytics-description">
+        <button type="button" id="analytics-decline" data-i18n="analyticsDecline">사용 안 함</button>
+        <button type="button" id="analytics-allow" data-i18n="analyticsAllow">허용</button>
+      </div>
+    </section>
   </body>
 </html>

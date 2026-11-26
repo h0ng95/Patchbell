@@ -36,6 +36,11 @@
     downloadCopy: 'Download the file for your operating system.',
     comingSoon: 'Coming soon',
     advertisement: 'Advertisement',
+    analyticsSettings: 'Analytics settings',
+    analyticsTitle: 'Website analytics',
+    analyticsDescription: 'Allow Google Analytics to measure visits so we can improve the Patchbell website?',
+    analyticsDecline: 'Decline',
+    analyticsAllow: 'Allow',
     pageTitle: 'Patchbell — Security update alerts',
     description: 'Get security update alerts for your software with Patchbell for Windows and macOS.',
   };
