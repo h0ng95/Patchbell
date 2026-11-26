@@ -786,39 +786,32 @@ class _WatchRow extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (findSource == null) ...[
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          label,
-                          textAlign: TextAlign.end,
-                          style: statusStyle,
-                        ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(label, style: statusStyle),
+                          if (findSource != null)
+                            TextButton.icon(
+                              onPressed: findSource,
+                              style: TextButton.styleFrom(
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                              icon: const Icon(Icons.link_rounded, size: 16),
+                              label: Text(text.findSource),
+                            ),
+                        ],
                       ),
-                    ],
+                    ),
                   ],
                 ),
               ),
             ),
           ),
-          if (findSource != null)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label, style: statusStyle),
-                TextButton.icon(
-                  onPressed: findSource,
-                  style: TextButton.styleFrom(
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                  ),
-                  icon: const Icon(Icons.link_rounded, size: 16),
-                  label: Text(text.findSource),
-                ),
-              ],
-            ),
           PopupMenuButton<String>(
             tooltip: text.manage(name),
             onSelected: (action) => action == 'edit' ? onEdit() : onRemove(),

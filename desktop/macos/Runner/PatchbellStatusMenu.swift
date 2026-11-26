@@ -19,10 +19,16 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate, UNUserNotificationCen
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
   }
 
+  private static let iconWidth: CGFloat = 21
+  private static let statusPadding: CGFloat = 5
+  private static let badgeHeight: CGFloat = 14
+
   private let window: NSWindow
   private let channel: FlutterMethodChannel
   private let notificationCenter = UNUserNotificationCenter.current()
-  let statusItem = NSStatusBar.system.statusItem(withLength: 28)
+  let statusItem = NSStatusBar.system.statusItem(
+    withLength: PatchbellStatusMenu.iconWidth + 2 * PatchbellStatusMenu.statusPadding
+  )
   private let badge = Badge(labelWithString: "")
   private var badgeWidth: NSLayoutConstraint?
   private var affected: [AffectedItem] = []
@@ -211,34 +217,58 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate, UNUserNotificationCen
     statusItem.menu = menu
 
     guard let button = statusItem.button else { return }
-    button.imagePosition = .imageLeft
-    if #available(macOS 11.0, *),
-       let image = NSImage(systemSymbolName: "bell", accessibilityDescription: nil) {
-      image.isTemplate = true
-      button.image = image
-    } else {
-      button.title = "♢"
-    }
+    button.imagePosition = .imageOnly
 
     badge.translatesAutoresizingMaskIntoConstraints = false
     badge.wantsLayer = true
-    badge.layer?.backgroundColor = NSColor.systemRed.cgColor
-    badge.layer?.cornerRadius = 6
+    badge.layer?.backgroundColor = NSColor(
+      srgbRed: 0.81, green: 0.15, blue: 0.23, alpha: 1
+    ).cgColor
+    badge.layer?.cornerRadius = Self.badgeHeight / 2
     badge.alignment = .center
     badge.font = .monospacedDigitSystemFont(ofSize: 9, weight: .bold)
     badge.textColor = .white
     badge.isHidden = true
     badge.setAccessibilityElement(false)
     button.addSubview(badge)
-    let width = badge.widthAnchor.constraint(equalToConstant: 12)
+    let width = badge.widthAnchor.constraint(equalToConstant: Self.badgeHeight)
     badgeWidth = width
     NSLayoutConstraint.activate([
-      badge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -2),
-      badge.centerYAnchor.constraint(equalTo: button.centerYAnchor, constant: 4),
-      badge.heightAnchor.constraint(equalToConstant: 12),
+      badge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -Self.statusPadding),
+      badge.centerYAnchor.constraint(equalTo: button.centerYAnchor),
+      badge.heightAnchor.constraint(equalToConstant: Self.badgeHeight),
       width,
     ])
     updateBadge()
+  }
+
+  private static func statusIcon(width: CGFloat) -> NSImage {
+    let image = NSImage(size: NSSize(width: width, height: 16), flipped: false) { _ in
+      let path = NSBezierPath()
+      path.lineWidth = 1.8
+      path.lineCapStyle = .round
+      path.lineJoinStyle = .round
+
+      path.move(to: NSPoint(x: 5.5, y: 11.5))
+      path.line(to: NSPoint(x: 2, y: 8))
+      path.line(to: NSPoint(x: 5.5, y: 4.5))
+
+      path.move(to: NSPoint(x: 7.4, y: 9.5))
+      path.line(to: NSPoint(x: 10.5, y: 12.6))
+      path.line(to: NSPoint(x: 13.6, y: 9.5))
+      path.move(to: NSPoint(x: 10.5, y: 12.6))
+      path.line(to: NSPoint(x: 10.5, y: 3.4))
+
+      path.move(to: NSPoint(x: 15.5, y: 11.5))
+      path.line(to: NSPoint(x: 19, y: 8))
+      path.line(to: NSPoint(x: 15.5, y: 4.5))
+
+      NSColor.black.setStroke()
+      path.stroke()
+      return true
+    }
+    image.isTemplate = true
+    return image
   }
 
   func update(_ snapshot: [String: Any]) {
@@ -256,11 +286,16 @@ final class PatchbellStatusMenu: NSObject, NSMenuDelegate, UNUserNotificationCen
   private func updateBadge() {
     let count = affected.count
     let displayedCount = count > 99 ? "99+" : String(count)
-    let width: CGFloat = count > 99 ? 22 : (count > 9 ? 17 : 12)
+    let width: CGFloat = count > 99 ? 24 : (count > 9 ? 18 : Self.badgeHeight)
     badge.stringValue = displayedCount
     badge.isHidden = count == 0
     badgeWidth?.constant = width
-    statusItem.length = count == 0 ? 28 : 22 + width
+    // Reserve transparent space inside the centered template for the badge.
+    let imageWidth = Self.iconWidth + (count == 0 ? 0 : width + 3)
+    statusItem.length = imageWidth + 2 * Self.statusPadding
+    if let button = statusItem.button, button.image?.size.width != imageWidth {
+      button.image = Self.statusIcon(width: imageWidth)
+    }
     let label = count == 0 ? "Patchbell" : (labels["badge"] ?? "Patchbell")
     statusItem.button?.toolTip = label
     statusItem.button?.setAccessibilityLabel(label)

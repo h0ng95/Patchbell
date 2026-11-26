@@ -198,7 +198,9 @@ void main() {
     await tester.pumpWidget(PatchbellApp(watchlist: watchlist));
     await tester.pumpAndSettle();
     expect(requests, isEmpty);
-    expect(find.text('공지 출처 미연결'), findsOneWidget);
+    final unlinkedStatus = find.text('공지 출처 미연결');
+    expect(unlinkedStatus, findsOneWidget);
+    final statusX = tester.getTopLeft(unlinkedStatus).dx;
 
     await tester.tap(find.text('출처 찾기'));
     await tester.pumpAndSettle();
@@ -222,7 +224,9 @@ void main() {
     expect(watchlist.items.single.product.name, 'Example Desktop Host');
     expect(watchlist.items.single.product.appId, appId);
     expect(watchlist.items.single.version, installedVersion);
-    expect(find.text('일치 공지 없음'), findsOneWidget);
+    final checkedStatus = find.text('일치 공지 없음');
+    expect(checkedStatus, findsOneWidget);
+    expect(tester.getTopLeft(checkedStatus).dx, closeTo(statusX, 0.5));
     expect(find.text('출처 찾기'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
   }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
