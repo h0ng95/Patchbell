@@ -225,6 +225,12 @@ h1, h2, h3, p, figure { margin: 0; }
 .eyebrow-line { width: 23px; height: 1px; background: currentColor; }
 h1 { margin-top: 19px; font-size: clamp(2.75rem, 5.2vw, 4.65rem); letter-spacing: -.081em; line-height: 1.11; font-weight: 820; word-break: keep-all; }
 h1 em { color: var(--accent); font-style: normal; }
+.hero h1:lang(en) {
+  font-size: clamp(2.125rem, 4.65vw, 4.1rem);
+  letter-spacing: -.025em;
+  word-spacing: .05em;
+  line-height: 1.14;
+}
 .intro { max-width: 365px; margin-top: 24px; color: var(--muted); font-size: 1.03rem; line-height: 1.8; word-break: keep-all; }
 .hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 17px; margin-top: 29px; }
 .hero-actions > span { color: var(--muted); font-size: .875rem; }
@@ -353,6 +359,7 @@ h1 em { color: var(--accent); font-style: normal; }
   .hero { grid-template-columns: 1fr; gap: 35px; min-height: 0; padding-block: 45px 44px; }
   .hero::before { inset: 38% 0 0; }
   h1 { font-size: clamp(2.65rem, 9vw, 4rem); }
+  .hero h1:lang(en) { font-size: clamp(2rem, 8.8vw, 3.7rem); }
   .product { width: 100%; max-width: 500px; }
   .how { padding-block: 23px 35px; }
   .steps { grid-template-columns: 1fr; gap: 19px; }
