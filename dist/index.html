@@ -151,14 +151,18 @@
       </div>
     </aside>
 
-    <footer class="site-footer">
+    <footer class="site-footer" id="footer">
       <div class="wrap footer-inner">
-        <a class="brand" href="#top" aria-label="패치벨 홈" data-i18n-label="home"><img class="brand-icon" src="./patchbell-logo.png" width="30" height="30" alt=""> Patchbell</a>
-        <div class="footer-details">
+        <div class="footer-project">
+          <a class="brand" href="#top" aria-label="패치벨 홈" data-i18n-label="home"><img class="brand-icon" src="./patchbell-logo.png" width="30" height="30" alt=""> Patchbell</a>
+          <p class="footer-credit"><span data-i18n="footerDeveloper">개발</span> <a href="https://github.com/h0ng95">h0ng95</a></p>
+        </div>
+        <nav class="footer-details" aria-label="하단 링크" data-i18n-label="footerNavigation">
+          <a href="https://github.com/h0ng95/Patchbell">GitHub</a>
+          <a href="https://github.com/h0ng95/Patchbell/issues" data-i18n="footerFeedback">문의·제보</a>
           <button type="button" id="analytics-settings" aria-controls="analytics-choice"
                   aria-expanded="false" data-i18n="analyticsSettings" hidden>방문 통계 설정</button>
-          <span>Windows · macOS</span>
-        </div>
+        </nav>
       </div>
     </footer>
     <section class="analytics-choice" id="analytics-choice" aria-labelledby="analytics-title" hidden>
