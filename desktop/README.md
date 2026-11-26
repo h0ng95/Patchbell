@@ -36,6 +36,6 @@ GitHub 저장소의 Actions 변수 `PATCHBELL_SUPPORT_URL`에 운영자의 공�
 
 ## 배포
 
-**Release Patchbell desktop** 워크플로는 Windows ZIP과 macOS DMG를 GitHub Releases에 올립니다. 홈페이지를 배포할 때는 **Deploy Patchbell homepage** 워크플로를 따로 실행합니다. 이때 최신 공개 릴리스의 설치 파일을 다운로드 버튼에 연결합니다.
+**Release Patchbell desktop** 워크플로는 Windows ZIP과 macOS DMG를 GitHub Releases에 올립니다. 홈페이지를 배포할 때는 **Deploy Patchbell homepage** 워크플로를 따로 실행합니다. 최신 공개 릴리스가 있으면 설치 파일을 다운로드 버튼에 연결하고, 첫 릴리스 전에는 **출시 준비 중**으로 표시합니다.
 
 홈페이지 방문 통계는 GitHub Actions 변수 `PATCHBELL_GA_MEASUREMENT_ID`에 GA4 웹 스트림의 측정 ID를 넣어 연결합니다. 이 값이 설정된 배포에서는 방문자가 방문 통계를 허용한 경우에만 Google 태그를 불러옵니다. 홈페이지 푸터에서 선택을 변경할 수 있습니다.

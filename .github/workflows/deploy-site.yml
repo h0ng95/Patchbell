@@ -28,16 +28,27 @@ jobs:
           PATCHBELL_GA_MEASUREMENT_ID: ${{ vars.PATCHBELL_GA_MEASUREMENT_ID }}
         shell: bash
         run: |
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/patchbell-release.json"
           node --input-type=module <<'EOF'
-          import { readFileSync, writeFileSync } from 'node:fs';
-          const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/patchbell-release.json`, 'utf8'));
+          import { writeFileSync } from 'node:fs';
+          const response = await fetch(`${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}/releases/latest`, {
+            headers: {
+              Accept: 'application/vnd.github+json',
+              Authorization: `Bearer ${process.env.GH_TOKEN}`,
+            },
+          });
           const names = { windows: 'Patchbell-Windows-x64.zip', macos: 'Patchbell-macOS.dmg' };
           const downloads = {};
-          for (const [platform, name] of Object.entries(names)) {
-            const asset = release.assets.find(asset => asset.name === name && asset.state === 'uploaded' && asset.size > 0);
-            if (!asset?.browser_download_url) throw new Error(`Missing published download ${name}`);
-            downloads[platform] = { url: asset.browser_download_url, version: release.tag_name.slice(1) };
+          if (response.ok) {
+            const release = await response.json();
+            for (const [platform, name] of Object.entries(names)) {
+              const asset = release.assets.find(asset => asset.name === name && asset.state === 'uploaded' && asset.size > 0);
+              if (!asset?.browser_download_url) throw new Error(`Missing published download ${name}`);
+              downloads[platform] = { url: asset.browser_download_url, version: release.tag_name.slice(1) };
+            }
+          } else if (response.status === 404) {
+            console.log('No public release yet. The homepage will show downloads as coming soon.');
+          } else {
+            throw new Error(`Could not look up the latest release (HTTP ${response.status})`);
           }
           const support = process.env.PATCHBELL_SUPPORT_URL ?? '';
           const analyticsId = (process.env.PATCHBELL_GA_MEASUREMENT_ID ?? '').trim();
