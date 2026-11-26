@@ -1,7 +1,7 @@
 name: patchbell_desktop
 description: "Security advisory alerts for your desktop apps and developer tools."
 publish_to: 'none'
-version: 0.1.1
+version: 0.1.2
 
 environment:
   sdk: ^3.6.2
