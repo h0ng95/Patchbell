@@ -80,7 +80,7 @@ jobs:
         run: |
           flutter build macos --release --no-pub "--dart-define=PATCHBELL_SUPPORT_URL=$PATCHBELL_SUPPORT_URL"
           app=build/macos/Build/Products/Release/Patchbell.app
-          lipo -verify_arch arm64 x86_64 "$app/Contents/MacOS/Patchbell"
+          lipo "$app/Contents/MacOS/Patchbell" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$app"
 
           stage=$(mktemp -d)
