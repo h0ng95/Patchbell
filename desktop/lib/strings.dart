@@ -61,6 +61,7 @@ class PatchbellText {
       'Track apps, editors, SDKs, languages, and runtimes.');
   String get checkFailed => _choose('확인 실패', 'Check failed');
   String get unlinked => _choose('공지 출처 미연결', 'No advisory source');
+  String get findSource => _choose('출처 찾기', 'Find source');
   String get unchecked => _choose('미확인', 'Not checked');
   String get noMatches => _choose('일치 공지 없음', 'No matching advisories');
   String advisoryCount(int count) => _choose(
@@ -73,8 +74,8 @@ class PatchbellText {
   String lastChecked(String date) =>
       _choose('최근 확인 $date', 'Last checked $date');
   String get linkSourceToCheck => _choose(
-      '항목 수정에서 제품이나 패키지를 연결하면 보안 공지를 확인할 수 있어요.',
-      'Edit this item and link a product or package to check advisories.');
+      '이 항목의 보안 공지를 확인하려면 같은 제품이나 패키지를 연결해 주세요.',
+      'Link the matching product or package to check advisories for this item.');
   String get nothingChecked =>
       _choose('아직 조회한 보안 공지가 없어요.', 'Advisories have not been checked yet.');
   String get noVersionAdvisories => _choose(
@@ -171,6 +172,11 @@ class PatchbellText {
       _choose('빠른 선택 · $count개', 'Quick picks · $count');
   String get nothingFound =>
       _choose('일치하는 제품이나 패키지가 없어요.', 'No matching products or packages.');
+  String get chooseMatchingSource => _choose('등록한 항목과 같은 제품이나 패키지를 선택해 주세요.',
+      'Choose the same product or package as the item you are tracking.');
+  String get noSourceFound => _choose(
+      '연결할 출처 후보가 없어요. 제조사나 영문 제품명으로 다시 검색해 보세요.',
+      'No sources found. Try searching by publisher or the English product name.');
   String get addManually => _choose('직접 등록', 'Add manually');
   String npmVersion(String version) =>
       _choose('npm · 최신 $version', 'npm · Latest $version');

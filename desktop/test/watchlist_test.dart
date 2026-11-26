@@ -142,6 +142,92 @@ void main() {
   });
 
   testWidgets(
+      'a detected app can find and save an advisory source from its row',
+      (tester) async {
+    const installedVersion = '1.2.3.4';
+    const appId = 'windows:example desktop host:example inc';
+    final unlinked = TrackedVersion(
+      product: Product.custom(
+        name: 'Example Desktop Host',
+        category: ProductCategory.app,
+        appId: appId,
+      ),
+      version: installedVersion,
+    );
+    final prefs = _MemoryPreferences();
+    await prefs.setString(
+        'patchbell.watchlist.v1',
+        jsonEncode({
+          'items': [unlinked.toJson()],
+          'notifications': false,
+        }));
+    final requests = <Uri>[];
+    final watchlist = Watchlist(
+      preferences: prefs,
+      client: NvdClient(
+        requestSpacing: Duration.zero,
+        getPage: (uri) async {
+          requests.add(uri);
+          if (uri.path.contains('/cpes/')) {
+            final found =
+                uri.queryParameters['keywordSearch'] == 'Example Desktop';
+            return {
+              'startIndex': 0,
+              'totalResults': found ? 1 : 0,
+              'products': [
+                if (found)
+                  {
+                    'cpe': {
+                      'cpeName':
+                          'cpe:2.3:a:example:example_desktop:1.2.3.4:*:*:*:*:*:*:*',
+                    },
+                  },
+              ],
+            };
+          }
+          return {'startIndex': 0, 'totalResults': 0, 'vulnerabilities': []};
+        },
+      ),
+      alerts: _RecordingAlerts(),
+      npm: NpmClient(request: (uri, {payload}) async {
+        requests.add(uri);
+        return {'objects': [], 'total': 0};
+      }),
+    );
+
+    await tester.pumpWidget(PatchbellApp(watchlist: watchlist));
+    await tester.pumpAndSettle();
+    expect(requests, isEmpty);
+    expect(find.text('공지 출처 미연결'), findsOneWidget);
+
+    await tester.tap(find.text('출처 찾기'));
+    await tester.pumpAndSettle();
+    expect(requests.single.queryParameters['keywordSearch'],
+        'Example Desktop Host');
+    expect(find.textContaining('연결할 출처 후보가 없어요'), findsOneWidget);
+    expect(watchlist.items.single.product.canCheck, isFalse);
+
+    await tester.enterText(find.byType(TextField), 'Example Desktop');
+    await tester.pump(const Duration(milliseconds: 450));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('example desktop'));
+    await tester.pumpAndSettle();
+    expect(find.text(installedVersion), findsOneWidget);
+    expect(watchlist.items.single.product.canCheck, isFalse);
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+
+    expect(requests.last.queryParameters['cpeName'],
+        'cpe:2.3:a:example:example_desktop:1.2.3.4:*:*:*:*:*:*:*');
+    expect(watchlist.items.single.product.name, 'Example Desktop Host');
+    expect(watchlist.items.single.product.appId, appId);
+    expect(watchlist.items.single.version, installedVersion);
+    expect(find.text('일치 공지 없음'), findsOneWidget);
+    expect(find.text('출처 찾기'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  }, variant: const TargetPlatformVariant({TargetPlatform.windows}));
+
+  testWidgets(
       'the Mac menu counts affected versions and opens existing dialogs',
       (tester) async {
     final messenger = tester.binding.defaultBinaryMessenger;

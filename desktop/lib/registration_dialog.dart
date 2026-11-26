@@ -23,10 +23,16 @@ Future<CatalogMatch?> showAdvisoryCatalog(
     );
 
 class RegistrationDialog extends StatefulWidget {
-  const RegistrationDialog({super.key, required this.watchlist, this.item});
+  const RegistrationDialog({
+    super.key,
+    required this.watchlist,
+    this.item,
+    this.source,
+  });
 
   final Watchlist watchlist;
   final TrackedVersion? item;
+  final CatalogMatch? source;
 
   @override
   State<RegistrationDialog> createState() => _RegistrationDialogState();
@@ -49,8 +55,11 @@ class _RegistrationDialogState extends State<RegistrationDialog> {
     _custom = existing?.id.startsWith('custom:') ?? false;
     _category = existing?.category ?? ProductCategory.sdk;
     _product = _custom ? null : existing;
-    _linkedCpe = _custom ? existing?.cpe : null;
-    _linkedNpm = _custom ? existing?.npmPackage : null;
+    if (_custom) {
+      final source = widget.source;
+      _linkedCpe = source == null ? existing?.cpe : source.cpe;
+      _linkedNpm = source == null ? existing?.npmPackage : source.npmPackage;
+    }
   }
 
   @override
@@ -571,6 +580,11 @@ class _CatalogDialogState extends State<_CatalogDialog> {
               ),
             ],
             const SizedBox(height: 8),
+            if (widget.onMatch == null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(text.chooseMatchingSource),
+              ),
             if (_searching &&
                 presetKeys.isEmpty &&
                 _sources.every(
@@ -615,7 +629,9 @@ class _CatalogDialogState extends State<_CatalogDialog> {
                       ..._resultSlivers(source, presetKeys, text),
                     if (noMatches)
                       SliverToBoxAdapter(
-                        child: _ResultHeading(text.nothingFound),
+                        child: _ResultHeading(widget.onMatch == null
+                            ? text.noSourceFound
+                            : text.nothingFound),
                       ),
                   ],
                 ),

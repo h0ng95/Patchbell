@@ -259,13 +259,26 @@ class _HomeState extends State<_Home> {
     }
   }
 
-  Future<void> _register([TrackedVersion? item]) async {
+  Future<void> _register([TrackedVersion? item, CatalogMatch? source]) async {
     final saved = await showDialog<bool>(
       context: context,
-      builder: (_) =>
-          RegistrationDialog(watchlist: widget.watchlist, item: item),
+      builder: (_) => RegistrationDialog(
+        watchlist: widget.watchlist,
+        item: item,
+        source: source,
+      ),
     );
     if (saved == true && mounted) setState(() => _filter = null);
+  }
+
+  Future<void> _findSource(TrackedVersion item) async {
+    final source = await showAdvisoryCatalog(
+      context,
+      widget.watchlist,
+      item.product.name,
+      productsOnly: item.product.appId != null,
+    );
+    if (mounted && source != null) await _register(item, source);
   }
 
   Future<void> _scanInstalled() async {
@@ -598,7 +611,14 @@ class _HomeState extends State<_Home> {
                               checking: watchlist.checkingKey == item.key,
                               error: watchlist.checkError(item),
                               onDetails: () => _showDetails(
-                                  context, item, watchlist.checkError(item)),
+                                context,
+                                item,
+                                watchlist.checkError(item),
+                                onFindSource: () => _findSource(item),
+                              ),
+                              onFindSource: item.product.canCheck
+                                  ? null
+                                  : () => _findSource(item),
                               onEdit: () => _register(item),
                               onRemove: () => watchlist.remove(item),
                             ),
@@ -691,6 +711,7 @@ class _WatchRow extends StatelessWidget {
     required this.checking,
     required this.error,
     required this.onDetails,
+    required this.onFindSource,
     required this.onEdit,
     required this.onRemove,
   });
@@ -699,6 +720,7 @@ class _WatchRow extends StatelessWidget {
   final bool checking;
   final String? error;
   final VoidCallback onDetails;
+  final VoidCallback? onFindSource;
   final VoidCallback onEdit;
   final VoidCallback onRemove;
 
@@ -708,17 +730,20 @@ class _WatchRow extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final name = text.productName(item.product);
     final count = item.advisories.length;
+    final findSource = onFindSource;
     final (label, color) = switch ((checking, error, item.checkedAt, count)) {
+      _ when !item.product.canCheck => (text.unlinked, colors.onSurfaceVariant),
       (true, _, _, _) => (text.checking, colors.primary),
       (_, String _, _, _) => (text.checkFailed, colors.tertiary),
-      (_, _, null, _) when !item.product.canCheck => (
-          text.unlinked,
-          colors.onSurfaceVariant
-        ),
       (_, _, null, _) => (text.unchecked, colors.onSurfaceVariant),
       (_, _, _, 0) => (text.noMatches, colors.onSurfaceVariant),
       _ => (text.advisoryCount(count), colors.tertiary),
     };
+    final statusStyle = TextStyle(
+      color: color,
+      fontWeight: FontWeight.w600,
+      fontSize: 12,
+    );
     return DecoratedBox(
       decoration: BoxDecoration(
         color: colors.surface,
@@ -761,23 +786,39 @@ class _WatchRow extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.end,
-                        style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 12,
+                    if (findSource == null) ...[
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          label,
+                          textAlign: TextAlign.end,
+                          style: statusStyle,
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
             ),
           ),
+          if (findSource != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: statusStyle),
+                TextButton.icon(
+                  onPressed: findSource,
+                  style: TextButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+                  icon: const Icon(Icons.link_rounded, size: 16),
+                  label: Text(text.findSource),
+                ),
+              ],
+            ),
           PopupMenuButton<String>(
             tooltip: text.manage(name),
             onSelected: (action) => action == 'edit' ? onEdit() : onRemove(),
@@ -792,7 +833,12 @@ class _WatchRow extends StatelessWidget {
   }
 }
 
-void _showDetails(BuildContext context, TrackedVersion item, [String? error]) {
+void _showDetails(
+  BuildContext context,
+  TrackedVersion item,
+  String? error, {
+  VoidCallback? onFindSource,
+}) {
   showDialog<void>(
     context: context,
     builder: (context) {
@@ -862,6 +908,15 @@ void _showDetails(BuildContext context, TrackedVersion item, [String? error]) {
             onPressed: () => Navigator.pop(context),
             child: Text(text.close),
           ),
+          if (!item.product.canCheck && onFindSource != null)
+            FilledButton.tonalIcon(
+              onPressed: () {
+                Navigator.pop(context);
+                onFindSource();
+              },
+              icon: const Icon(Icons.link_rounded, size: 16),
+              label: Text(text.findSource),
+            ),
           if (item.product.updateUrl case final updateUrl?)
             FilledButton.tonalIcon(
               onPressed: () => _open(context, Uri.parse(updateUrl)),
