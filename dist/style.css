@@ -297,19 +297,6 @@ h1 em { color: var(--accent); font-style: normal; }
 .mac-icon::after { content: ""; position: absolute; top: 100%; left: 50%; width: 22px; border-bottom: 1.6px solid currentColor; translate: -50% 3px; }
 .platform-download { margin-inline-start: auto; padding: 8px 10px; border: 1px solid var(--control-line); border-radius: 6px; color: var(--accent); font-size: .87rem; font-weight: 740; }
 .platform-download:hover { background: var(--panel-tint); }
-.footer-ad-inner { padding-block: 32px 40px; border-top: 1px solid var(--line); }
-.footer-ad-slot {
-  display: grid;
-  place-items: center;
-  width: min(100%, 728px);
-  min-height: 90px;
-  margin-inline: auto;
-  padding: 12px;
-  border: 1px dashed var(--control-line);
-  border-radius: 10px;
-  color: var(--muted);
-  font-size: .8rem;
-}
 .site-footer { border-top: 1px solid var(--line); }
 .footer-inner { min-height: 72px; padding-block: 16px; font-size: .875rem; color: var(--muted); }
 .footer-inner .brand { font-size: 1rem; color: var(--ink); }
@@ -366,7 +353,6 @@ h1 em { color: var(--accent); font-style: normal; }
   .how { padding-block: 23px 35px; }
   .steps { grid-template-columns: 1fr; gap: 19px; }
   .download-inner { grid-template-columns: 1fr; gap: 24px; padding-block: 51px; }
-  .footer-ad-inner { padding-block: 24px 32px; }
 }
 
 @media (max-width: 550px) {

@@ -35,7 +35,6 @@
     downloadTitle: 'Download Patchbell',
     downloadCopy: 'Download the file for your operating system.',
     comingSoon: 'Coming soon',
-    advertisementSpace: 'Advertisement space',
     footerDeveloper: 'Developed by',
     footerNavigation: 'Footer links',
     footerFeedback: 'Feedback',
